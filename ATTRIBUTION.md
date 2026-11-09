@@ -9,7 +9,17 @@
 - 本项目使用 2500×1604 原始照片；浏览器按比例缩放显示，支持原图和目标放大查看。感知教学叠层和导出截图包含人工标注、视觉滤镜与仿真示意。
 - 保留作者署名及许可。传播包含该照片的改编图像时，应遵守 CC BY-SA 4.0 对署名、修改说明和相同方式共享的要求。
 
-照片为东京涩谷，当前没有本地道路实拍素材。归一化框属于人工标注；距离、BEV、探测质量、波形与车辆运动均不是照片实测值。
+新增五张实景照片均来自 Wikimedia Commons，采用 **CC BY-SA 4.0**：
+
+- **hong-kong-traffic.jpg**：[HK YTM 油麻地 Yau Ma Tei 彌敦道 Nathan Road traffic jam March 2021 SS2 01.jpg](https://commons.wikimedia.org/wiki/File:HK_YTM_%E6%B2%B9%E9%BA%BB%E5%9C%B0_Yau_Ma_Tei_%E5%BD%8C%E6%95%A6%E9%81%93_Nathan_Road_traffic_jam_March_2021_SS2_01.jpg)，作者 **Keun PAgosau LVHSOVH**。
+- **amsterdam-cycleway.jpg**：[Cycling Amsterdam 04.jpg](https://commons.wikimedia.org/wiki/File:Cycling_Amsterdam_04.jpg)，作者 **Alfredo Borba**。
+- **amsterdam-junction.jpg**：[Sunny Street scene in the street Sarphatistraat with cyclists biking; free photo Amsterdam, Fons Heijnsbroek 10-2021.jpg](https://commons.wikimedia.org/wiki/File:Sunny_Street_scene_in_the_street_Sarphatistraat_with_cyclists_biking;_free_photo_Amsterdam,_Fons_Heijnsbroek_10-2021.jpg)，作者 **Fons Heijnsbroek**。
+- **amsterdam-tramway.jpg**：[Cyclist hurrying at Vijzelgracht × Prinsengracht in Amsterdam.jpg](https://commons.wikimedia.org/wiki/File:Cyclist_hurrying_at_Vijzelgracht_%C3%97_Prinsengracht_in_Amsterdam.jpg)，作者 **Andrej Shadura**。
+- **san-francisco-crosswalk.jpg**：[Crosswalk of Market at Third, San Francisco.jpg](https://commons.wikimedia.org/wiki/File:Crosswalk_of_Market_at_Third,_San_Francisco.jpg)，作者 **Dllu**。
+
+新增照片缩放为 1280 像素宽，保留完整画面。页面缩略图为展示裁切，放大原图不裁切。照片上的目标框、天气与点云为本项目添加的教学叠层；导出图像保留照片署名及许可。照片及其改编图像遵循 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)。机器可读来源见 `src/assets/scenes/sources.json`。
+
+照片分别来自东京、香港、阿姆斯特丹和旧金山。归一化框属于人工标注；距离、BEV、探测质量、波形与车辆运动均不是照片实测值。
 
 ## 开源依赖
 

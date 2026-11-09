@@ -1,23 +1,10 @@
-import { createStage, drawCar, label, roundRect } from '../platform';
+import { createStage, label, roundRect } from '../platform';
 import { drawPremiumTopCar } from '../car-art';
 import type { GameAPI, MountedGame } from '../types';
 import './perception.css';
+import { PERCEPTION_SCENES, type SceneTarget, type TargetId } from './perception-scenes';
 
 type Sensor = 'camera' | 'lidar' | 'radar';
-type TargetId = 'vehicle' | 'pedestrian' | 'cyclist' | 'signal';
-interface SceneTarget {
-  id: TargetId; name: string; color: string;
-  x: number; y: number; w: number; h: number;
-  distance: number; bevX: number; bevY: number;
-}
-// Coordinates are normalized to the original photo. Distances and BEV are teaching settings,
-// not depth or speed measured from the photo. This single manifest is replaceable with local scenes.
-const TARGETS: SceneTarget[] = [
-  { id: 'vehicle', name: '车辆', color: '#75b8ff', x: .408, y: .811, w: .041, h: .040, distance: 26, bevX: .27, bevY: .29 },
-  { id: 'pedestrian', name: '行人', color: '#60efd3', x: .032, y: .777, w: .068, h: .166, distance: 18, bevX: .58, bevY: .45 },
-  { id: 'cyclist', name: '骑行者', color: '#ffc575', x: .752, y: .831, w: .038, h: .096, distance: 12, bevX: .75, bevY: .65 },
-  { id: 'signal', name: '交通信号', color: '#d4a9ff', x: .010, y: .351, w: .055, h: .090, distance: 35, bevX: .69, bevY: .18 }
-];
 const SENSOR_LABELS: Record<Sensor, string> = { camera: '摄像头', lidar: '激光雷达', radar: '毫米波雷达' };
 const PHOTO = { x: 16, y: 40, w: 968, h: 602 };
 // Diagnostics have their own collapsible canvas, so the street photo keeps its detail.
@@ -98,13 +85,22 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
     rain: clamp(Number(savedConfig?.rain ?? 0), 0, 100), fog: clamp(Number(savedConfig?.fog ?? 0), 0, 100),
     light: clamp(Number(savedConfig?.light ?? 100), 0, 100), speed: clamp(Number(savedConfig?.speed ?? 40), 20, 60)
   };
-  const found = new Set<TargetId>((Array.isArray(old.discovered) ? old.discovered : []).filter((id): id is TargetId => TARGETS.some(t => t.id === id)));
+  let scene = PERCEPTION_SCENES.find(item => item.id === old.sceneId) ?? PERCEPTION_SCENES[0];
+  let targets = scene.targets;
+  const allTargetIds = new Set(PERCEPTION_SCENES.flatMap(item => item.targets.map(target => target.id)));
+  const found = new Set<TargetId>((Array.isArray(old.discovered) ? old.discovered : []).filter((id): id is TargetId => allTargetIds.has(id as TargetId)));
+  const discoveredByScene: Record<string, TargetId[]> = {};
+  for (const item of PERCEPTION_SCENES) {
+    const saved = (old.discoveredByScene as Record<string, unknown> | undefined)?.[item.id];
+    discoveredByScene[item.id] = (Array.isArray(saved) ? saved : item.id === 'shibuya' ? [...found] : []).filter((id): id is TargetId => item.targets.some(target => target.id === id));
+  }
+  let sceneFound = new Set(discoveredByScene[scene.id]);
   const trials: TrialRecord[] = Array.isArray(old.trials) ? old.trials.slice(-6) as TrialRecord[] : [];
   const signatures = new Set<string>(Array.isArray(old.comparedConfigurations) ? (old.comparedConfigurations as string[]).map(value => {
     try { return sensorSignature(JSON.parse(value) as PerceptionConfig); } catch { return value; }
   }) : []);
   let split = clamp(Number(old.split ?? 50), 6, 94), distance = clamp(Number(old.tofDistance ?? 18), 5, 60);
-  let view: 'photo' | 'compare' | 'scan' = 'photo', selected: TargetId = 'pedestrian';
+  let view: 'photo' | 'compare' | 'scan' = 'photo', selected: TargetId = targets.find(target => target.id === old.selectedTarget)?.id ?? targets[0].id;
   let pointer = { x: PHOTO.x + PHOTO.w * .54, y: PHOTO.y + PHOTO.h * .54 };
   let trial: TrialState | null = null, disposed = false, recordTimer = 0, captureTimer = 0;
   let scannerTime = 0, scanCompleted = Boolean(old.scanCompleted), splitEarned = Boolean(old.splitExplored), tofEarned = Boolean(old.tofExplored);
@@ -114,27 +110,38 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
   let announcedTarget: TargetId | null = null;
   let toolStage: ReturnType<typeof createStage> | null = null;
   let zoomNatural = false;
-  const image = new Image();
-  image.decoding = 'async';
-  image.onload = () => {
-    imageLoaded = true;
-    // These are 2D photo-edge samples for a visual teaching layer, not measured 3D returns.
-    const sampleCanvas = document.createElement('canvas');
-    sampleCanvas.width = 288; sampleCanvas.height = Math.round(288 * image.naturalHeight / image.naturalWidth);
-    const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
-    if (sampleCtx) {
-      sampleCtx.drawImage(image, 0, 0, sampleCanvas.width, sampleCanvas.height);
-      const data = sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height).data;
-      const brightness = (sx: number, sy: number) => { const index = (sy * sampleCanvas.width + sx) * 4; return (data[index] + data[index + 1] + data[index + 2]) / 3; };
-      for (let sy = 2; sy < sampleCanvas.height - 2; sy += 2) for (let sx = 2; sx < sampleCanvas.width - 2; sx += 2) {
-        const edge = Math.abs(brightness(sx + 1, sy) - brightness(sx - 1, sy)) + Math.abs(brightness(sx, sy + 1) - brightness(sx, sy - 1));
-        if (edge > 42 && ((sx * 13 + sy * 29) % 7) < 4) photoSamples.push({ x: sx / sampleCanvas.width, y: sy / sampleCanvas.height, strength: Math.min(1, edge / 160) });
+  let image = new Image();
+  function loadSceneImage() {
+    const nextImage = new Image();
+    image = nextImage; imageLoaded = false; imageFailed = false; photoSamples = [];
+    nextImage.decoding = 'async';
+    nextImage.onload = () => {
+      if (disposed || image !== nextImage) return;
+      imageLoaded = true;
+      // Photo edges are 2D teaching samples, not measured 3D returns.
+      const sampleCanvas = document.createElement('canvas');
+      sampleCanvas.width = 288; sampleCanvas.height = Math.round(288 * image.naturalHeight / image.naturalWidth);
+      const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+      if (sampleCtx) {
+        sampleCtx.drawImage(image, 0, 0, sampleCanvas.width, sampleCanvas.height);
+        const data = sampleCtx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height).data;
+        const brightness = (sx: number, sy: number) => { const index = (sy * sampleCanvas.width + sx) * 4; return (data[index] + data[index + 1] + data[index + 2]) / 3; };
+        for (let sy = 2; sy < sampleCanvas.height - 2; sy += 2) for (let sx = 2; sx < sampleCanvas.width - 2; sx += 2) {
+          const edge = Math.abs(brightness(sx + 1, sy) - brightness(sx - 1, sy)) + Math.abs(brightness(sx, sy + 1) - brightness(sx, sy - 1));
+          if (edge > 42 && ((sx * 13 + sy * 29) % 7) < 4) photoSamples.push({ x: sx / sampleCanvas.width, y: sy / sampleCanvas.height, strength: Math.min(1, edge / 160) });
+        }
       }
-    }
+      status.textContent = `${scene.location}：${scene.hint}。点击下方目标开始扫描。`;
+      updateUI(); scheduleRecord();
+    };
+    nextImage.onerror = () => {
+      if (disposed || image !== nextImage) return;
+      imageFailed = true; status.textContent = '场景照片未能载入，请重试或选择其他场景。'; updateUI();
+    };
+    nextImage.src = scene.image;
     updateUI();
-  };
-  image.onerror = () => { imageFailed = true; updateUI(); };
-  image.src = new URL('../assets/street.jpg', import.meta.url).href;
+  }
+  const targetButtons = () => targets.map(t => `<button class="btn perception-target" data-target="${t.id}" aria-pressed="${t.id === selected}"><span class="perception-target-dot" style="--target-color:${t.color}"></span>${t.name}<span class="perception-found-mark" aria-hidden="true">＋</span></button>`).join('');
 
   host.innerHTML = `
     <section class="experience perception-experience">
@@ -146,23 +153,26 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
         </div>
         <div class="perception-toolbar-end"><button class="btn perception-photo-zoom">⤢ 放大实景</button><button class="btn perception-capture">保存实验照片</button></div>
       </div>
+      <div class="perception-scene-picker" role="group" aria-label="选择道路场景">
+        ${PERCEPTION_SCENES.map(item => `<button class="perception-scene" data-scene="${item.id}" aria-pressed="${item.id === scene.id}" title="${item.location} · ${item.hint}"><img src="${item.image}" alt="" loading="lazy"><span>${item.name}</span></button>`).join('')}
+      </div>
       <div class="perception-workspace">
         <div class="perception-main">
           <div class="playfield perception-playfield" tabindex="0" aria-label="高清实景感知实验舞台，方向键移动扫描光标，点击目标联动教学鸟瞰图"></div>
           <div class="perception-objects" role="group" aria-label="选择并扫描教学标注目标">
-            ${TARGETS.map(t => `<button class="btn perception-target" data-target="${t.id}" aria-pressed="${t.id === selected}"><span class="perception-target-dot" style="--target-color:${t.color}"></span>${t.name}<span class="perception-found-mark" aria-hidden="true">＋</span></button>`).join('')}
+            ${targetButtons()}
           </div>
-          <div class="perception-photo-caption"><span class="perception-data-chip">涩谷实景照片 · Kakidai</span><span>先观察，再扫描，发现目标可以查看原图细节</span></div>
+          <div class="perception-photo-caption"><span class="perception-data-chip"></span><span>先观察，再扫描，发现目标可以查看原图细节</span></div>
         </div>
         <aside class="control-panel perception-settings">
-          <div class="perception-control-heading"><span class="perception-eyebrow">SENSOR LAB / 01</span><strong>给汽车换一双眼睛</strong></div>
+          <div class="perception-control-heading"><strong>给汽车换一双眼睛</strong></div>
           <div class="control-group perception-sensors"><span class="perception-control-label">传感器组合</span><div class="perception-sensor-row">
             ${(['camera', 'lidar', 'radar'] as Sensor[]).map(s => `<label class="perception-sensor"><input type="checkbox" data-sensor="${s}" ${config[s] ? 'checked' : ''}><span>${SENSOR_LABELS[s]}</span></label>`).join('')}
           </div></div>
           <div class="control-group perception-range-group"><label for="perception-fog">雾的浓度 <output data-value="fog">${config.fog}%</output></label><input id="perception-fog" type="range" min="0" max="100" value="${config.fog}" data-config="fog"></div>
           <div class="control-group perception-range-group"><label for="perception-rain">雨的强度 <output data-value="rain">${config.rain}%</output></label><input id="perception-rain" type="range" min="0" max="100" value="${config.rain}" data-config="rain"></div>
           <div class="control-group perception-range-group"><label for="perception-light">环境光照 <output data-value="light">${config.light}%</output></label><input id="perception-light" type="range" min="0" max="100" value="${config.light}" data-config="light"></div>
-          <button class="btn perception-clear-weather">恢复晴天与正常光照</button>
+          <button class="btn perception-image-retry" hidden>重新载入照片</button><button class="btn perception-clear-weather">恢复晴天与正常光照</button>
           <div class="control-group perception-range-group" data-split-control hidden><label for="perception-split">分屏位置 <output data-value="split">${split}%</output></label><input id="perception-split" type="range" min="6" max="94" value="${split}" data-range="split"></div>
           <div class="perception-control-divider"></div>
           <button class="btn perception-target-zoom">⤢ 查看行人细节</button>
@@ -182,12 +192,12 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
         </div>
       </details>
       <div class="perception-evidence" aria-label="最近两次配置对照"></div>
-      <p class="science-note perception-science"><strong>数据说明</strong> 涩谷实景照片：Kakidai / Wikimedia Commons · CC BY-SA 4.0。框选为人工教学标注；点云、距离、天气影响和制动均为教学仿真，并非照片实测。雨雾也会影响激光雷达。</p>
+      <p class="science-note perception-science"><strong>数据说明</strong> <span class="perception-credit"></span>框选为人工教学标注；点云、距离、天气影响和制动均为教学仿真，并非照片实测。雨雾也会影响激光雷达。</p>
       <dialog class="perception-zoom-dialog" aria-labelledby="perception-zoom-title">
-        <div class="perception-zoom-header"><div><span class="perception-eyebrow">REAL SCENE / DETAIL</span><h3 id="perception-zoom-title">清晰实景</h3></div><button class="btn perception-zoom-close" aria-label="关闭实景放大">✕</button></div>
+        <div class="perception-zoom-header"><div><h3 id="perception-zoom-title">清晰实景</h3></div><button class="btn perception-zoom-close" aria-label="关闭实景放大">✕</button></div>
         <div class="perception-zoom-toolbar"><span class="perception-zoom-meta"></span><div><button class="btn perception-zoom-fit is-active">适应窗口</button><button class="btn perception-zoom-native">100% 原图</button></div></div>
-        <div class="perception-zoom-viewport"><img class="perception-zoom-image" alt="涩谷道路实景照片"></div>
-        <p class="perception-zoom-credit">照片：Kakidai / Wikimedia Commons · CC BY-SA 4.0。局部标框为教学标注。</p>
+        <div class="perception-zoom-viewport"><img class="perception-zoom-image" alt="道路实景照片"></div>
+        <p class="perception-zoom-credit"></p>
       </dialog>
     </section>`;
 
@@ -203,7 +213,7 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
   const zoomImage = root.querySelector<HTMLImageElement>('.perception-zoom-image')!;
   const abort = new AbortController();
   const listen = (el: EventTarget, event: string, fn: EventListener) => el.addEventListener(event, fn, { signal: abort.signal });
-  const selectedTarget = () => TARGETS.find(t => t.id === selected)!;
+  const selectedTarget = () => targets.find(t => t.id === selected)!;
 
   function saveRecord() {
     const last = trials.at(-1);
@@ -216,7 +226,11 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
       summary,
       report: [
         { label: last ? '最近路测传感器' : '我的传感器组合', value: sensors },
-        { label: '扫描发现', value: `${found.size}/4 类教学标注目标` },
+        { label: '观察场景', value: `${scene.name} · ${scene.location}` },
+        { label: '本图扫描', value: `${sceneFound.size}/${targets.length} 个教学标注目标` },
+        { label: '累计发现', value: `${found.size}/4 类教学标注目标` },
+        { label: '照片署名', value: `${scene.author} / Wikimedia Commons · ${scene.license}` },
+        { label: '照片来源', value: scene.source },
         { label: '路测雨 / 雾 / 光照', value: `${reportConfig.rain}% / ${reportConfig.fog}% / ${reportConfig.light}%（教学环境）` },
         { label: '路测虚拟车速', value: `${reportConfig.speed} km/h` },
         { label: '光波教学测距', value: `${distance} m，对应往返 ${(distance * 2 / .299792458).toFixed(1)} ns` },
@@ -224,10 +238,11 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
         { label: '最近路测', value: last ? last.safe ? `安全停下，停车余量 ${last.margin.toFixed(1)} m` : '教学系统已安全暂停，可以改配置再试' : '尚未进行' },
         { label: '数据来源', value: '照片为实景；点云、距离和制动为教学仿真，并非照片实测' }
       ],
-      configuration: { ...config }, discovered: [...found], split, tofDistance: distance,
+      configuration: { ...config }, discovered: [...found], sceneId: scene.id,
+      discoveredByScene: { ...discoveredByScene, [scene.id]: [...sceneFound] }, split, tofDistance: distance,
       splitExplored: splitEarned, tofExplored: tofEarned, scanCompleted,
       comparedConfigurations: [...signatures], trials: trials.slice(-6),
-      dataOrigin: { image: imageLoaded ? 'street.jpg 实景照片' : '备用二维教学场景',
+      dataOrigin: { image: imageLoaded ? `${scene.name} · ${scene.location}` : imageFailed ? '照片载入失败' : '照片载入中',
         annotations: '人工教学标注', distances: '教学设定，非实测',
         waveform: '按 d=cΔt/2 计算的教学波形', detection: '教学探测模型，非设备置信度',
         pointLayer: '照片二维边缘采样与教学目标点示意，非真实三维点云' },
@@ -241,14 +256,15 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
     if (scanCompleted && trials.length > 0) api.complete('perception');
   }
   function discover(id: TargetId) {
-    if (found.has(id)) return;
+    if (sceneFound.has(id) || !imageLoaded) return;
+    sceneFound.add(id); discoveredByScene[scene.id] = [...sceneFound];
     found.add(id);
-    api.award('perception', `target-${id}`, 5, `扫描发现${TARGETS.find(t => t.id === id)!.name}`);
-    if (found.size === TARGETS.length) {
+    api.award('perception', `target-${id}`, 5, `扫描发现${targets.find(t => t.id === id)!.name}`);
+    if (found.size === allTargetIds.size && !scanCompleted) {
       scanCompleted = true;
       status.textContent = '四种目标已定位！现在换传感器，看看虚拟汽车能否及时停下。';
       api.notify('已集齐四种目标，完成感知扫描！'); markComplete();
-    } else status.textContent = `已定位${TARGETS.find(t => t.id === id)!.name}，实景标注与鸟瞰图已联动。`;
+    } else status.textContent = `已定位${targets.find(t => t.id === id)!.name}，实景标注与鸟瞰图已联动。`;
     updateUI(); scheduleRecord();
   }
   function exploreSplit(value: number) {
@@ -284,7 +300,7 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
   function openZoom(id: TargetId | null) {
     if (!imageLoaded) { api.notify('实景照片正在载入，请稍后再打开。'); return; }
     zoomNatural = false;
-    const target = id ? TARGETS.find(t => t.id === id)! : null;
+    const target = id ? targets.find(t => t.id === id)! : null;
     const heading = root.querySelector<HTMLElement>('#perception-zoom-title')!;
     const meta = root.querySelector<HTMLElement>('.perception-zoom-meta')!;
     if (target) {
@@ -305,8 +321,8 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
       meta.textContent = `来源 ${image.naturalWidth} × ${image.naturalHeight} px · 局部 ${sw} × ${sh} px`;
       zoomImage.classList.add('is-crop');
     } else {
-      zoomImage.src = image.src; zoomImage.alt = '涩谷道路高清实景原图';
-      heading.textContent = '清晰实景 · 涩谷道路';
+      zoomImage.src = image.src; zoomImage.alt = `${scene.location}高清实景照片`;
+      heading.textContent = `${scene.name} · ${scene.location}`;
       meta.textContent = `${image.naturalWidth} × ${image.naturalHeight} px · 100% 模式可以滚动查看原图`;
       zoomImage.classList.remove('is-crop');
     }
@@ -314,12 +330,20 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
   }
   function updateUI() {
     if (disposed) return;
-    progress.textContent = `${scanCompleted ? '扫描完成' : `已发现 ${found.size}/4`} · 对照 ${Math.min(signatures.size, 2)}/2`;
+    root.dataset.scene = scene.id; root.dataset.imageState = imageLoaded ? 'ready' : imageFailed ? 'error' : 'loading';
+    playfield.setAttribute('aria-busy', String(!imageLoaded && !imageFailed));
+    progress.textContent = `本图 ${sceneFound.size}/${targets.length} · 累计 ${found.size}/4 类`;
+    root.querySelectorAll<HTMLButtonElement>('[data-scene]').forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.scene === scene.id));
+      button.disabled = Boolean(trial && !trial.ended);
+    });
+    root.querySelectorAll<HTMLButtonElement>('.perception-photo-zoom, .perception-target-zoom, .perception-capture, [data-target]').forEach(button => button.disabled = !imageLoaded);
+    root.querySelector<HTMLButtonElement>('.perception-image-retry')!.hidden = !imageFailed;
     root.querySelectorAll<HTMLButtonElement>('[data-target]').forEach(btn => {
       const id = btn.dataset.target as TargetId;
-      btn.classList.toggle('is-found', found.has(id)); btn.classList.toggle('is-selected', selected === id);
+      btn.classList.toggle('is-found', sceneFound.has(id)); btn.classList.toggle('is-selected', selected === id);
       btn.setAttribute('aria-pressed', String(selected === id));
-      btn.querySelector('.perception-found-mark')!.textContent = found.has(id) ? '✓' : '＋';
+      btn.querySelector('.perception-found-mark')!.textContent = sceneFound.has(id) ? '✓' : '＋';
     });
     root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(btn => {
       btn.classList.toggle('is-active', btn.dataset.view === view); btn.setAttribute('aria-pressed', String(btn.dataset.view === view));
@@ -338,7 +362,9 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
     if (!trials.length && !trial) testButton.innerHTML = '开始 AEB 路测 <span aria-hidden="true">→</span>';
     root.querySelectorAll<HTMLInputElement>('[data-config], [data-sensor]').forEach(input => input.disabled = Boolean(trial && !trial.ended));
     root.querySelector<HTMLButtonElement>('.perception-clear-weather')!.disabled = Boolean(trial && !trial.ended);
-    if (imageFailed) root.querySelector('.perception-data-chip')!.textContent = '教学街景 × 教学仿真';
+    root.querySelector('.perception-data-chip')!.textContent = imageFailed ? '照片载入失败' : `${scene.location} · ${scene.author}`;
+    root.querySelector('.perception-credit')!.textContent = `照片：${scene.author} / Wikimedia Commons · ${scene.license}。`;
+    root.querySelector('.perception-zoom-credit')!.textContent = `照片：${scene.author} / Wikimedia Commons · ${scene.license}。局部标框为人工教学标注。`;
     const recent = trials.slice(-2);
     evidence.innerHTML = recent.map((t, i) => `<div class="perception-evidence-item ${t.safe ? 'is-safe' : 'needs-adjustment'}"><span>测试 ${trials.length - recent.length + i + 1}</span><strong>${(['camera', 'lidar', 'radar'] as Sensor[]).filter(s => t.config[s]).map(s => SENSOR_LABELS[s]).join(' + ') || '未启用传感器'}</strong><span>${t.config.speed} km/h · ${t.safe ? `安全停下，余量 ${Math.max(0, t.margin).toFixed(1)} m` : '安全暂停，换配置再试'}</span></div>`).join('');
   }
@@ -364,6 +390,7 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
   }
 
   function selectTarget(id: TargetId) {
+    if (!imageLoaded || !targets.some(target => target.id === id)) return;
     selected = id; const target = selectedTarget();
       const rect = targetRect(target);
       pointer = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
@@ -375,7 +402,19 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
   }
   listen(root, 'click', ((event: MouseEvent) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
-    if (!button) return;
+    if (!button || button.disabled) return;
+    if (button.dataset.scene && button.dataset.scene !== scene.id) {
+      const next = PERCEPTION_SCENES.find(item => item.id === button.dataset.scene);
+      if (!next || (trial && !trial.ended)) return;
+      discoveredByScene[scene.id] = [...sceneFound];
+      scene = next; targets = scene.targets; sceneFound = new Set(discoveredByScene[scene.id]);
+      selected = targets[0].id; view = 'photo'; trial = null; scannerTime = 0; announcedTarget = null;
+      pressed = false; draggingSplit = false; clearTimeout(captureTimer);
+      root.querySelector('.perception-objects')!.innerHTML = targetButtons();
+      status.textContent = `正在载入${scene.name}…`;
+      loadSceneImage(); scheduleRecord();
+    }
+    if (button.classList.contains('perception-image-retry')) loadSceneImage();
     if (button.dataset.view) {
       view = button.dataset.view as 'photo' | 'compare' | 'scan'; scannerTime = 0; updateUI();
       status.textContent = view === 'photo' ? '清晰实景模式：观察原图细节，点击“放大实景”可查看原始像素。' : view === 'scan' ? '移动鼠标扫描目标，也可以点下方目标卡或用方向键。' : '拖动白色分屏线，对照同一场景的图像与教学数据。';
@@ -451,7 +490,7 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
         pressed = true;
         draggingSplit = view === 'compare' && Math.abs(x - (PHOTO.x + PHOTO.w * split / 100)) < 28 && y >= PHOTO.y && y <= PHOTO.y + PHOTO.h;
         if (!draggingSplit && x >= PHOTO.x && x <= PHOTO.x + PHOTO.w && y >= PHOTO.y && y <= PHOTO.y + PHOTO.h) {
-          const hit = TARGETS.find(t => { const r = targetRect(t); return x >= r.x - 8 && x <= r.x + r.w + 8 && y >= r.y - 8 && y <= r.y + r.h + 8; });
+          const hit = targets.find(t => { const r = targetRect(t); return x >= r.x - 8 && x <= r.x + r.w + 8 && y >= r.y - 8 && y <= r.y + r.h + 8; });
           if (hit) selectTarget(hit.id);
         }
       }
@@ -462,8 +501,8 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
       if (kind === 'up') { pressed = false; draggingSplit = false; }
     },
     update(dt) {
-      if (view === 'scan') {
-        const hit = TARGETS.find(t => { const r = targetRect(t); return Math.hypot(pointer.x - (r.x + r.w / 2), pointer.y - (r.y + r.h / 2)) < Math.max(15, Math.min(28, r.w * .58)); });
+      if (view === 'scan' && imageLoaded) {
+        const hit = targets.find(t => { const r = targetRect(t); return Math.hypot(pointer.x - (r.x + r.w / 2), pointer.y - (r.y + r.h / 2)) < Math.max(15, Math.min(28, r.w * .58)); });
         if (hit) {
           if (announcedTarget !== hit.id) { scannerTime = 0; announcedTarget = hit.id; }
           scannerTime += dt;
@@ -480,33 +519,6 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
     draw(ctx, time) { drawWorld(ctx, time); }
   });
 
-  function drawFallback(ctx: CanvasRenderingContext2D) {
-    const { x, y, w, h } = PHOTO;
-    ctx.fillStyle = '#a6c3d3'; ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = '#ccdce1'; ctx.fillRect(x, y + 95, w, 150);
-    for (let i = 0; i < 9; i++) {
-      const bx = x + i * 80 - 15, bh = 65 + (i % 3) * 32;
-      ctx.fillStyle = i % 2 ? '#899fab' : '#b7c4cb'; ctx.fillRect(bx, y + 205 - bh, 66, bh);
-      ctx.fillStyle = '#627f8e'; for (let yy = y + 218 - bh; yy < y + 192; yy += 18) for (let xx = bx + 9; xx < bx + 58; xx += 17) ctx.fillRect(xx, yy, 8, 10);
-    }
-    ctx.fillStyle = '#424e60'; ctx.beginPath(); ctx.moveTo(x + 230, y + 165); ctx.lineTo(x + 430, y + 165); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#e0e4dd'; ctx.lineWidth = 4; ctx.setLineDash([22, 20]); ctx.beginPath(); ctx.moveTo(x + 338, y + 174); ctx.lineTo(x + 342, y + h); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#b4c4be'; ctx.beginPath(); ctx.moveTo(x, y + 215); ctx.lineTo(x + 190, y + 181); ctx.lineTo(x + 227, y + 203); ctx.lineTo(x + 42, y + h); ctx.lineTo(x, y + h); ctx.closePath(); ctx.fill();
-    for (const target of TARGETS) {
-      const tx = x + (target.x + target.w / 2) * w, ty = y + (target.y + target.h) * h;
-      if (target.id === 'vehicle') drawCar(ctx, tx, ty - 12, '#79aacf', .60);
-      if (target.id === 'pedestrian' || target.id === 'cyclist') {
-        ctx.strokeStyle = target.color; ctx.lineWidth = 5;
-        ctx.beginPath(); ctx.arc(tx, ty - 61, 9, 0, Math.PI * 2); ctx.fillStyle = '#e8d7c5'; ctx.fill();
-        ctx.beginPath(); ctx.moveTo(tx, ty - 49); ctx.lineTo(tx, ty - 23); ctx.moveTo(tx, ty - 44); ctx.lineTo(tx - 13, ty - 29); ctx.moveTo(tx, ty - 42); ctx.lineTo(tx + 13, ty - 30); ctx.moveTo(tx, ty - 23); ctx.lineTo(tx - 12, ty); ctx.moveTo(tx, ty - 23); ctx.lineTo(tx + 10, ty); ctx.stroke();
-        if (target.id === 'cyclist') { ctx.lineWidth = 2; for (const dx of [-18, 20]) { ctx.beginPath(); ctx.arc(tx + dx, ty, 14, 0, Math.PI * 2); ctx.stroke(); } }
-      }
-      if (target.id === 'signal') {
-        ctx.strokeStyle = '#354956'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(tx, ty + 30); ctx.lineTo(tx, ty - 46); ctx.stroke();
-        roundRect(ctx, tx - 12, ty - 54, 24, 50, 5, '#172b36'); ctx.fillStyle = '#77f0bb'; ctx.beginPath(); ctx.arc(tx, ty - 15, 6, 0, Math.PI * 2); ctx.fill();
-      }
-    }
-  }
   function drawPhoto(ctx: CanvasRenderingContext2D, time: number) {
     const { x, y, w, h } = PHOTO;
     ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 12); ctx.clip();
@@ -514,7 +526,10 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
       const rect = imageRect();
       ctx.fillStyle = '#0e2534'; ctx.fillRect(x, y, w, h);
       ctx.drawImage(image, rect.x, rect.y, rect.w, rect.h);
-    } else drawFallback(ctx);
+    } else {
+      ctx.fillStyle = '#0e2534'; ctx.fillRect(x, y, w, h);
+      label(ctx, imageFailed ? '照片未能载入，请重试或切换场景' : '正在载入道路照片…', x + 260, y + h / 2, 22, '#b4d0e0');
+    }
     if (view === 'photo') { ctx.restore(); return; }
     ctx.fillStyle = `rgba(4,13,30,${(100 - config.light) / 100 * .62})`; ctx.fillRect(x, y, w, h);
     const fog = config.fog / 100;
@@ -560,7 +575,7 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
       }
       ctx.globalAlpha = 1;
     }
-    for (const target of TARGETS) {
+    for (const target of targets) {
       const rect = targetRect(target);
       for (let row = 0; row < 13; row++) for (let col = 0; col < 10; col++) {
         const hash = ((row * 17 + col * 31 + target.name.length * 23) % 100) / 100;
@@ -581,8 +596,8 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
     }
   }
   function drawTargetAnnotations(ctx: CanvasRenderingContext2D) {
-    for (const target of TARGETS) {
-      const rect = targetRect(target), isSelected = target.id === selected, isFound = found.has(target.id);
+    for (const target of targets) {
+      const rect = targetRect(target), isSelected = target.id === selected, isFound = sceneFound.has(target.id);
       ctx.strokeStyle = target.color; ctx.lineWidth = isSelected ? 2 : 1;
       ctx.globalAlpha = isFound || isSelected ? 1 : .5;
       ctx.setLineDash(isFound ? [] : [4, 4]); ctx.strokeRect(rect.x, rect.y, rect.w, rect.h); ctx.setLineDash([]); ctx.globalAlpha = 1;
@@ -607,7 +622,7 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
     const model = perceptionModel(trial && !trial.ended ? trial.config : config);
     const frontY = carY - 21;
     ctx.fillStyle = '#61e7d214'; ctx.beginPath(); ctx.moveTo(carX, frontY); ctx.lineTo(carX - 70, frontY - Math.min(200, model.effectiveRange * 4.06)); ctx.lineTo(carX + 70, frontY - Math.min(200, model.effectiveRange * 4.06)); ctx.closePath(); ctx.fill();
-    for (const target of trial ? [] : TARGETS) {
+    for (const target of trial ? [] : targets) {
       const tx = x + target.bevX * w, ty = y + 35 + target.bevY * (h - 75);
       const isSelected = selected === target.id;
       if (isSelected) {
@@ -618,7 +633,7 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
         ctx.save(); ctx.translate(tx, ty + 8); ctx.rotate(-Math.PI / 2);
         drawPremiumTopCar(ctx, 0, 0, target.color, .35, 'city'); ctx.restore();
       } else roundRect(ctx, tx - 5, ty - 5, 10, 10, 3, target.color);
-      if (found.has(target.id) || isSelected) label(ctx, target.name, tx + 13, ty + 6, 11, target.color);
+      if (sceneFound.has(target.id) || isSelected) label(ctx, target.name, tx + 13, ty + 6, 11, target.color);
     }
     if (trial) {
       // The trial is a separate teaching scene. The obstacle line and front bumper share
@@ -682,7 +697,7 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
   function drawWorld(ctx: CanvasRenderingContext2D, time: number) {
     ctx.fillStyle = '#061827'; ctx.fillRect(0, 0, 1000, 660);
     label(ctx, 'PERCEPTION / 城市道路感知', 20, 25, 13, '#d1e5ef', 600);
-    label(ctx, imageLoaded ? view === 'photo' ? '清晰原图 · 点击“放大实景”查看原始细节' : '实景照片 + 人工教学标注' : '二维教学街景', 687, 25, 11, '#8fb3c6');
+    label(ctx, imageLoaded ? view === 'photo' ? '清晰原图 · 点击“放大实景”查看原始细节' : '实景照片 + 人工教学标注' : imageFailed ? '照片载入失败' : '照片载入中', 687, 25, 11, '#8fb3c6');
     drawPhoto(ctx, time);
     if (view !== 'photo') {
       ctx.save();
@@ -706,11 +721,11 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
       roundRect(ctx, PHOTO.x + 12, PHOTO.y + 10, 89, 22, 4, '#061827c9'); label(ctx, '实景 / 图像', PHOTO.x + 20, PHOTO.y + 26, 11, '#dceaf2');
       roundRect(ctx, PHOTO.x + PHOTO.w - 169, PHOTO.y + 10, 157, 22, 4, '#061827e8'); label(ctx, '感知层 / 教学仿真', PHOTO.x + PHOTO.w - 159, PHOTO.y + 26, 11, '#74e9d3');
     }
-    label(ctx, 'Photo: Kakidai / Wikimedia Commons · CC BY-SA 4.0', 22, 655, 9, '#7395a8');
+    label(ctx, `Photo: ${scene.author} / Wikimedia Commons · ${scene.license}`, 22, 655, 9, '#7395a8');
     label(ctx, view === 'photo' ? '原图模式 · 无天气遮罩' : '点云为二维边缘与目标示意 · 距离为教学设定', 706, 655, 9, '#7395a8');
   }
 
-  updateUI(); markComplete();
+  loadSceneImage(); markComplete();
   // Initial physics results are not awarded; points require the child's actual interactions.
   return { destroy() {
     if (disposed) return;

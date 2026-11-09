@@ -21,3 +21,18 @@
 
 /* Keep physical Canvas pixels independent from responsive CSS layout. */
 .canvas-stage canvas{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;margin:0!important}
+
+/* Bound the working area on wide monitors; let narrow windows reflow controls. */
+.main{max-width:none;width:calc(100% - 90px)}
+.main>header,.main>#page-content,.main>footer{max-width:1440px;margin-left:auto;margin-right:auto}
+.game-title-group,.game-title-group>div,.game-heading-actions{min-width:0}
+.game-title-group p{line-height:1.6}
+.game-heading-actions,.stage-bar,.game-bottom-nav,.section-heading{flex-wrap:wrap}
+.stage-bar>*,.game-bottom-nav>*{min-width:0}
+.profile-copy strong{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.score-pill{flex-shrink:0}
+.sidebar{overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:1150px){.experience:not(.perception-experience):not(.ai-experience){grid-template-columns:minmax(0,1fr)}.factory-experience .factory-controls{display:block}.factory-test-heading{flex-wrap:wrap}.factory-drive-actions{margin-left:0}.experience:not(.perception-experience):not(.ai-experience)>.control-panel{display:block}}
+@media(max-width:900px){.main{width:calc(100% - 70px)}}
+@media(max-width:600px){.main{width:calc(100% - 58px)}.game-heading-actions{align-self:flex-start}.hero-actions{flex-wrap:wrap}.section-note{line-height:1.6}.site-footer{flex-wrap:wrap}.factory-colors{flex-wrap:wrap}.factory-save-row{flex-wrap:wrap}.factory-save-row>.btn{min-width:0}.factory-experience .factory-controls{min-width:0}.ai-experience .ai-road-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:380px){.games-grid{grid-template-columns:minmax(0,1fr)}.hero h1{font-size:28px}.hero{padding:20px 15px}.topbar .score-pill>span{display:none}.regen-live-stats{padding:12px 8px}.regen-live-stats>div{padding-left:6px}.regen-live-stats strong{font-size:17px}}
