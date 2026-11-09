@@ -1,6 +1,7 @@
 import type { GameAPI, MountedGame, Vehicle } from '../types';
 import { createStage, roundRect, label, downloadFile, escapeHTML } from '../platform';
-import { drawPremiumCar } from '../car-art';
+import { drawPremiumCar, premiumCarSVG } from '../car-art';
+import { createChallenge, answerEvent, challengeStars, type Challenge } from './factory-challenge';
 import './factory.css';
 
 type Part = 'battery' | 'motor' | 'body';
@@ -16,8 +17,8 @@ interface Outcome {
   energy: number; remaining: number; peakPower: number; maxSpeed: number;
   mass: number; rangeEstimate: number; limiting: string; trace: Trace[];
 }
-interface SavedRun extends Omit<Outcome, 'trace'> { timestamp: string }
-interface Playback { outcome: Outcome; elapsed: number; displaySeconds: number; paused: boolean; finished: boolean }
+interface SavedRun extends Omit<Outcome, 'trace'> { timestamp: string; stars?: number; decisions?: Challenge['answers']; mistakes?: number }
+interface Playback { outcome: Outcome; elapsed: number; displaySeconds: number; paused: boolean; finished: boolean; challenge: Challenge; eventPhase: 'question' | 'feedback' | null }
 
 const BATTERIES: BatterySpec[] = [
   { value: 24, title: '轻巧电池', power: 28, mass: 180, coins: 24, hint: '轻便省预算 · 供电 28 kW' },
@@ -30,14 +31,14 @@ const MOTORS: MotorSpec[] = [
   { value: 140, title: '劲力电机', torque: 280, mass: 120, coins: 44 },
 ];
 const BODIES: BodySpec[] = [
-  { value: 'city', title: '城市轻巧车', mass: 780, drag: .58, rolling: .012, gear: 8.4, coins: 16 },
-  { value: 'touring', title: '旅行跨界车', mass: 940, drag: .69, rolling: .014, gear: 9.2, coins: 22 },
-  { value: 'sport', title: '流线运动型', mass: 850, drag: .52, rolling: .013, gear: 7.6, coins: 24 },
+  { value: 'city', title: '豆豆 · 城市轻巧车', mass: 780, drag: .58, rolling: .012, gear: 8.4, coins: 16 },
+  { value: 'touring', title: '山野 · 旅行跨界车', mass: 940, drag: .69, rolling: .014, gear: 9.2, coins: 22 },
+  { value: 'sport', title: '闪电 · 电动赛车', mass: 850, drag: .52, rolling: .013, gear: 7.6, coins: 24 },
 ];
 const ROADS: Road[] = [
-  { id: 'city', title: '校园送货', subtitle: '带着 100 kg 小包裹，穿过校园', distance: 1200, speed: 42, grade: 0, payload: 100, seconds: 10 },
-  { id: 'hill', title: '爬坡冒险', subtitle: '18% 教学坡道 · 额外载重 300 kg', distance: 400, speed: 36, grade: .18, payload: 300, seconds: 11 },
-  { id: 'range', title: '远方探索', subtitle: '240 km 加速演示 · 看电量够跑多远', distance: 240000, speed: 48, grade: 0, payload: 40, seconds: 14 },
+  { id: 'city', title: '校园快递员', subtitle: '100 kg 快递任务 · 安全送达才算酷', distance: 1200, speed: 42, grade: 0, payload: 100, seconds: 14 },
+  { id: 'hill', title: '山顶补给站', subtitle: '18% 教学坡道 · 护送 300 kg 物资', distance: 400, speed: 36, grade: .18, payload: 300, seconds: 16 },
+  { id: 'range', title: '追风远征队', subtitle: '240 km 加速演示 · 把每一度电用好', distance: 240000, speed: 48, grade: 0, payload: 40, seconds: 18 },
 ];
 const COLORS = ['#62bd95', '#73aaf1', '#ef9579', '#efc45d', '#a594d6', '#f4f2e9'];
 const clamp = (n: number, min = 0, max = 1) => Math.min(max, Math.max(min, n));
@@ -168,9 +169,15 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     r && ROADS.some(road => road.id === r.route) && Number.isFinite(r.ratio) && Number.isFinite(r.energy)).slice(-24) : [];
   const storedBest = typeof stored.best === 'object' && stored.best ? stored.best as Partial<Record<RouteId, number>> : {};
   const best: Record<RouteId, number> = { city: 0, hill: 0, range: 0 };
+  const stars: Record<RouteId, number> = { city: 0, hill: 0, range: 0 };
+  const attempts: Record<RouteId, number> = { city: 0, hill: 0, range: 0 };
   ROADS.forEach(road => {
     const value = storedBest[road.id];
     if (typeof value === 'number' && Number.isFinite(value)) best[road.id] = clamp(value);
+    const mark = (stored.stars as Record<string, unknown> | undefined)?.[road.id];
+    if (typeof mark === 'number' && Number.isFinite(mark)) stars[road.id] = Math.floor(clamp(mark, 0, 3));
+    const count = (stored.attempts as Record<string, unknown> | undefined)?.[road.id];
+    if (typeof count === 'number' && Number.isFinite(count)) attempts[road.id] = Math.max(0, Math.floor(count));
   });
   runs.forEach(r => best[r.route] = Math.max(best[r.route], clamp(r.ratio)));
   let chosenPart: Part = 'battery';
@@ -181,22 +188,31 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
   let destroyed = false, elapsed = 0;
   let stage: ReturnType<typeof createStage>;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let message = runs.length ? '欢迎回到你的工位，车和试跑记录都在。' : '套件已经配好！拖动部件玩装配，也可以直接试跑。';
+  let message = runs.length ? '车和试跑记录都在。新任务有三次路况挑战，试着拿到三颗星！' : '选一辆喜欢的车，带它接任务！途中遇到路况时，由你来决定怎么做。';
   let comparison: { previous: SavedRun; current: SavedRun } | null = null;
 
   host.innerHTML = `<div class="experience factory-experience">
     <section class="playfield factory-playfield">
       <div class="factory-stage"><div class="factory-view-toggle" role="group" aria-label="汽车展示方式"><button type="button" data-view="exterior">完整车身</button><button type="button" data-view="cutaway">查看动力底盘</button></div></div>
+      <div class="factory-mission-progress" hidden aria-label="本次任务进度"></div>
+      <section class="factory-event" hidden aria-labelledby="factory-event-title">
+        <div class="factory-event-top"><span class="factory-event-number"></span><span>小车已停稳，想好了再选</span></div>
+        <h4 id="factory-event-title" tabindex="-1"></h4><p class="factory-event-question"></p>
+        <div class="factory-event-choices"></div>
+        <p class="factory-event-feedback" role="status" aria-live="polite"></p>
+        <button type="button" class="btn btn-primary factory-event-continue" hidden>继续出发</button>
+      </section>
       <div class="factory-test-dock">
-        <div class="factory-test-heading"><span class="factory-step">02</span><div><h3>开出去试试看</h3><p>换个部件，同一条路再试一次</p></div><div class="factory-drive-actions"><button type="button" class="btn factory-pause" hidden>暂停试跑</button><button type="button" class="btn factory-return" hidden>回到工坊</button></div></div>
-        <div class="factory-route-list">${ROADS.map((r, i) => `<button type="button" class="factory-route" data-route="${r.id}"><span class="factory-route-number">0${i + 1}</span><span><strong>${r.title}</strong><small>${r.id === 'hill' ? '爬坡体验 ＋20' : r.id === 'range' ? '续航体验 ＋20' : '每条最佳行驶比例 ＋10'}</small></span><span class="factory-route-arrow">↗</span></button>`).join('')}</div>
+        <div class="factory-test-heading"><span class="factory-step">02</span><div><h3>接个任务，开出去！</h3><p>跑完全程 ＋ 首选答对两次 ＋ 三次全对 ＝ 三星</p></div><div class="factory-drive-actions"><button type="button" class="btn factory-pause" hidden>暂停试跑</button><button type="button" class="btn factory-return" hidden>回到工坊</button></div></div>
+        <div class="factory-route-list">${ROADS.map((r, i) => `<button type="button" class="factory-route" data-route="${r.id}"><span class="factory-route-number">0${i + 1}</span><span><strong>${r.title}</strong><small>${r.id === 'hill' ? '重载爬坡 / 动力匹配' : r.id === 'range' ? '长途远行 / 续航规划' : '礼让行人 / 平稳送达'}</small><span class="factory-route-stars" data-stars="${r.id}" aria-label="最佳0星">☆☆☆</span></span><span class="factory-route-arrow">↗</span></button>`).join('')}</div>
       </div>
       <div class="factory-message" role="status" aria-live="polite"><span class="factory-message-dot"></span><span class="factory-message-text"></span></div>
       <div class="factory-result" hidden>
         <div class="factory-result-heading"><span class="factory-result-title"></span><span class="chip">教学模型 · 同条件试跑</span></div>
         <div class="factory-result-values"></div><div class="factory-result-extra"></div><div class="factory-comparison" hidden></div>
+        <div class="factory-challenge-result"></div><div class="factory-result-actions"><button type="button" class="btn factory-retry">再挑战 · 换一组路况</button><button type="button" class="btn btn-primary factory-next">下一个任务</button></div>
       </div>
-      <p class="science-note factory-note">电池容量决定带多少电，供电能力决定电送得多快。逆变器、电机、减速器和车轮一起把电能变成运动。所有参数为教学模型。</p>
+      <p class="science-note factory-note">电池容量决定带多少电，供电能力决定电送得多快。途中选择决定挑战星级；里程与能耗由同条件教学模型计算，选择补能不会给本次测量增加电量。</p>
     </section>
     <aside class="control-panel factory-controls">
       <div class="factory-panel-heading"><span class="factory-step">01</span><div><span class="factory-eyebrow">YOUR OWN EV</span><h3>我的造车工位</h3></div></div>
@@ -224,7 +240,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     const latest = runs[runs.length - 1];
     const battery = batteryOf(vehicle), motor = motorOf(vehicle), body = bodyOf(vehicle);
     api.record('factory', {
-      configuration: { ...vehicle }, saved, compared, cutaway, runs: runs.slice(-24), best: { ...best },
+      configuration: { ...vehicle }, saved, compared, cutaway, runs: runs.slice(-24), best: { ...best }, stars: { ...stars }, attempts: { ...attempts },
       summary: comparison ? `我在${comparison.current.routeName}换了部件：每100 km折算用电从${round(consumptionOf(comparison.previous), 2)}变为${round(consumptionOf(comparison.current), 2)} kWh，要结合行驶完成比例看。`
         : latest ? `我的${vehicle.name}在${latest.routeName}跑了${round(latest.distance / 1000, 2)} km，发现容量和供电能力是两回事。` : '我装配了自己的新能源小车，准备带它上路。',
       report: [
@@ -233,6 +249,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
         { label: '电机 / 车身', value: `${motor.value} kW / ${body.title}` },
         { label: '动力链', value: '电池 → 逆变器 → 电机 → 减速器 → 车轮' },
         { label: '校园 / 爬坡 / 长途最佳比例', value: `${round(best.city * 100)}% / ${round(best.hill * 100)}% / ${round(best.range * 100)}%` },
+        { label: '任务最佳星级', value: `校园 ${stars.city}/3 · 山顶 ${stars.hill}/3 · 远征 ${stars.range}/3` },
         ...(latest ? [
           { label: '最近试跑', value: `${latest.routeName}，完成 ${round(latest.distance / 1000, 2)} / ${round(latest.targetDistance / 1000, 2)} km` },
           { label: '最近能耗', value: `${round(latest.energy, 2)} kWh；起始电量固定为65%` },
@@ -262,20 +279,30 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     if (document.activeElement !== customColor) customColor.value = vehicle.color;
     const options = chosenPart === 'battery' ? BATTERIES.map(b => ({ value: b.value, title: b.title, detail: `${b.value} kWh · ${b.power} kW`, coins: b.coins }))
       : chosenPart === 'motor' ? MOTORS.map(m => ({ value: m.value, title: m.title, detail: `${m.value} kW · ${m.torque} N·m`, coins: m.coins }))
-        : BODIES.map(b => ({ value: b.value, title: b.title, detail: `${b.mass} kg · 车体质量`, coins: b.coins }));
-    get('.factory-options').innerHTML = options.map(o => `<button type="button" class="factory-option ${String(vehicle[chosenPart]) === String(o.value) ? 'is-selected' : ''}" data-option="${o.value}" aria-pressed="${String(vehicle[chosenPart]) === String(o.value)}"><span class="factory-option-check">${String(vehicle[chosenPart]) === String(o.value) ? '✓' : '○'}</span><span><strong>${o.title}</strong><small>${o.detail}</small></span><span class="factory-option-coins">${o.coins}<small>币</small></span></button>`).join('');
+        : BODIES.map(b => ({ value: b.value, title: b.title, detail: `${b.mass} kg · ${b.value === 'city' ? '圆润短车身' : b.value === 'touring' ? '高车顶，宽敞座舱' : '开放座舱，宽大尾翼'}`, coins: b.coins }));
+    get('.factory-options').innerHTML = options.map(o => `<button type="button" class="factory-option ${String(vehicle[chosenPart]) === String(o.value) ? 'is-selected' : ''}" data-option="${o.value}" aria-pressed="${String(vehicle[chosenPart]) === String(o.value)}">${chosenPart === 'body' ? `<span class="factory-body-preview" aria-hidden="true">${premiumCarSVG(vehicle.color, String(o.value))}</span>` : `<span class="factory-option-check">${String(vehicle[chosenPart]) === String(o.value) ? '✓' : '○'}</span>`}<span><strong>${o.title}</strong><small>${o.detail}</small></span><span class="factory-option-coins">${o.coins}<small>币</small></span></button>`).join('');
     get('.factory-part-detail').textContent = chosenPart === 'battery' ? 'kWh 是装多少电；kW 是供电有多快。长航电池容量更大，也更重。'
       : chosenPart === 'motor' ? '大电机需要电池供得上电。换大电机，也要看整条动力链。' : '轻车体减少负担；减速器传动比、车体阻力也会影响路测。';
     host.querySelectorAll<HTMLButtonElement>('[data-route]').forEach(button => {
       button.classList.toggle('is-selected', playback?.outcome.route === button.dataset.route);
       button.title = ROADS.find(r => r.id === button.dataset.route)?.subtitle ?? '';
     });
+    ROADS.forEach(road => {
+      const mark = get(`[data-stars="${road.id}"]`);
+      mark.textContent = '★'.repeat(stars[road.id]) + '☆'.repeat(3 - stars[road.id]);
+      mark.setAttribute('aria-label', `最佳${stars[road.id]}星，共3星`);
+    });
+    get('.factory-mission-progress').hidden = !playback;
+    if (playback) get('.factory-mission-progress').innerHTML = playback.challenge.events.map((event, i) => `<span class="${i < playback!.challenge.index ? 'is-done' : i === playback!.challenge.index ? 'is-current' : ''}">${i < playback!.challenge.index ? '✓' : i + 1} ${event.scene}</span>`).join('');
+    get('.factory-event').hidden = !playback?.eventPhase;
     get('.factory-pause').hidden = !playback || playback.finished;
+    get<HTMLButtonElement>('.factory-pause').disabled = !!playback?.eventPhase;
     get('.factory-pause').textContent = playback?.paused ? '继续试跑' : '暂停试跑';
     get('.factory-return').hidden = !playback;
     get('.factory-stamp-text').textContent = saved && runs.length ? '新能源造车体验章已点亮' : saved ? '车已保存，试跑一次就点亮体验章' : '保存＋试跑，领取我的造车体验章';
     get('.factory-stamp').classList.toggle('is-earned', saved && runs.length > 0);
     get<HTMLButtonElement>('.factory-save').innerHTML = saved ? '更新我的车 <span>已记录</span>' : '保存我的车 <span>＋20</span>';
+    host.querySelectorAll<HTMLInputElement | HTMLButtonElement>('.factory-controls input, .factory-controls button').forEach(control => control.disabled = !!playback && !playback.finished);
   }
 
   function displayResult(current: SavedRun) {
@@ -284,6 +311,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     get('.factory-result-title').textContent = `${current.routeName} · 这次的发现`;
     get('.factory-result-values').innerHTML = `<span><strong>${round(current.ratio * 100)}<small>%</small></strong>行驶完成比例</span><span><strong>${round(current.energy, 2)}<small> kWh</small></strong>本次消耗</span><span><strong>${round(current.peakPower)}<small> kW</small></strong>实际供电峰值</span>`;
     get('.factory-result-extra').textContent = `这条路最高跑到 ${round(current.maxSpeed)} km/h，模拟行驶 ${round(current.duration)} s，折算每100 km用电 ${round(consumptionOf(current), 2)} kWh。容量、供电能力和车重一起影响结果。`;
+    get('.factory-challenge-result').innerHTML = `<div class="factory-earned-stars" aria-label="本次${current.stars ?? 0}星">${'★'.repeat(current.stars ?? 0)}${'☆'.repeat(3 - (current.stars ?? 0))}</div><strong>${current.stars === 3 ? '三星车手，漂亮送达！' : '任务复盘，下次再多拿一颗星'}</strong><p>首次判断正确 ${current.decisions?.filter(a => a.firstTry).length ?? 0}/3 · 重试 ${current.mistakes ?? 0} 次${current.ratio < .999 ? ' · 未跑完全程，换个动力或电池搭档再来' : ''}</p><ul>${(current.decisions ?? []).map(a => `<li><span>${a.firstTry ? '✓' : '↻'} ${escapeHTML(a.title)}</span>${escapeHTML(a.explanation)}</li>`).join('')}</ul>`;
     const comparisonBox = get('.factory-comparison');
     comparisonBox.hidden = !comparison;
     if (comparison) {
@@ -295,7 +323,8 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     if (!playback || playback.finished) return;
     playback.finished = true;
     const { trace: _trace, ...outcome } = playback.outcome;
-    const current: SavedRun = { ...outcome, timestamp: new Date().toISOString() };
+    const current: SavedRun = { ...outcome, timestamp: new Date().toISOString(), stars: challengeStars(playback.challenge, outcome.ratio), decisions: playback.challenge.answers, mistakes: playback.challenge.mistakes };
+    stars[current.route] = Math.max(stars[current.route], current.stars!);
     const previous = [...runs].reverse().find(r => r.route === current.route && r.fingerprint !== current.fingerprint);
     comparison = previous ? { previous, current } : null;
     runs.push(current); if (runs.length > 24) runs.shift();
@@ -306,7 +335,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     if (previous) { compared = true; api.award('factory', 'same-route-remix', 10, '换部件，同条件对照'); }
     if (saved) api.complete('factory');
     const wentAllTheWay = current.ratio >= .999;
-    feedback(wentAllTheWay ? `到站啦！${current.routeName}完成，换一个部件看看会有什么不同。`
+    feedback(wentAllTheWay ? `到站啦！拿到 ${current.stars} 颗星。重玩会遇到不同路况，也可以换部件挑战其他任务。`
       : current.remaining < .01 ? `电量用完，跑到${round(current.distance / 1000, 1)} km。体验积分照样记录，换电池再试试看！`
         : `这次完成${round(current.ratio * 100)}%。${current.limiting}与车辆负担都影响速度，换个搭档再试一次。`);
     displayResult(current); persist(); updateControls();
@@ -316,10 +345,51 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     vehicle.name = nameInput.value.trim().slice(0, 16) || '我的小电车';
     dragging = null; comparison = null;
     const road = ROADS.find(r => r.id === routeId)!;
-    playback = { outcome: simulateRoad(vehicle, road), elapsed: 0, displaySeconds: reduceMotion ? 5 : road.seconds, paused: false, finished: false };
+    const challenge = createChallenge(routeId, attempts[routeId]++);
+    playback = { outcome: simulateRoad(vehicle, road), elapsed: 0, displaySeconds: reduceMotion ? 8 : road.seconds, paused: false, finished: false, challenge, eventPhase: null };
     get('.factory-result').hidden = true;
-    feedback(`${road.title}出发！从65%电量开始，${road.subtitle}。`);
+    feedback(`${road.title}出发！途中有三次选择，答错可以重试；跑完全程且三次首选正确就能拿到三星。`);
+    persist();
     updateControls();
+  }
+
+  function showRoadEvent() {
+    if (!playback) return;
+    const event = playback.challenge.events[playback.challenge.index];
+    playback.eventPhase = 'question';
+    get('.factory-event-number').textContent = `路况挑战 ${playback.challenge.index + 1} / 3`;
+    get('#factory-event-title').textContent = event.title;
+    get('.factory-event-question').textContent = event.question;
+    get('.factory-event-choices').innerHTML = event.choices.map((choice, index) => `<button type="button" data-decision="${index}"><span>${index + 1}</span>${escapeHTML(choice.title)}</button>`).join('');
+    get('.factory-event-feedback').textContent = '';
+    get('.factory-event-feedback').classList.remove('is-correct');
+    get('.factory-event-continue').hidden = true;
+    feedback('遇到新路况了！小车已停下，选一个合适的做法再继续。');
+    updateControls();
+    get('#factory-event-title').focus({ preventScroll: true });
+    get('.factory-event').scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }
+
+  function chooseAction(index: number) {
+    if (!playback || playback.paused || playback.eventPhase !== 'question') return;
+    const event = playback.challenge.events[playback.challenge.index];
+    const choice = event.choices[index];
+    if (!choice) return;
+    playback.challenge = answerEvent(playback.challenge, index);
+    get('.factory-event-feedback').textContent = choice.correct ? `✓ ${choice.explanation}` : `${choice.explanation} 换一个做法，再试一次。`;
+    get('.factory-event-feedback').classList.toggle('is-correct', choice.correct);
+    if (choice.correct) {
+      playback.eventPhase = 'feedback';
+      host.querySelectorAll<HTMLButtonElement>('[data-decision]').forEach(button => { button.disabled = true; button.classList.toggle('is-correct', Number(button.dataset.decision) === index); });
+      get('.factory-event-continue').hidden = false;
+      get('.factory-event-continue').focus({ preventScroll: true });
+      updateControls();
+    } else {
+      const button = get<HTMLButtonElement>(`[data-decision="${index}"]`);
+      button.disabled = true;
+      button.classList.add('is-wrong');
+      host.querySelector<HTMLButtonElement>('[data-decision]:not(:disabled)')?.focus({ preventScroll: true });
+    }
   }
 
   function changePart(part: Part, value: string) {
@@ -342,8 +412,8 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     label(ctx, vehicle.name, 78, 184, 50, '#244839', 700);
     label(ctx, `${api.getProfile().nickname || '小工程师'}的新能源造车作品`, 80, 227, 24, '#5f796a');
     roundRect(ctx, 70, 294, 860, 394, 32, '#fffdf5', '#d3e2d3');
-    ctx.fillStyle = '#dbead7'; ctx.beginPath(); ctx.ellipse(500, 601, 332, 43, 0, 0, Math.PI * 2); ctx.fill();
-    drawBody(ctx, 500, 545, vehicle, 3.35);
+    ctx.fillStyle = '#dbead7'; ctx.beginPath(); ctx.ellipse(500, 674, 275, 15, 0, 0, Math.PI * 2); ctx.fill();
+    drawBody(ctx, 500, 590, vehicle, 2.5);
     const battery = batteryOf(vehicle), motor = motorOf(vehicle);
     label(ctx, `${bodyOf(vehicle).title} · ${configurationCost(vehicle)} 工程币`, 111, 342, 20, '#496e58');
     for (const [i, pair] of [['电池容量', `${battery.value} kWh`], ['最大供电', `${battery.power} kW`], ['电机输出', `${motor.value} kW`]].entries()) {
@@ -376,7 +446,15 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
   const onClick = (event: MouseEvent) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
     if (!button || !host.contains(button)) return;
-    if (button.dataset.view) { cutaway = button.dataset.view === 'cutaway'; persist(); updateControls(); }
+    if (button.dataset.decision !== undefined) chooseAction(Number(button.dataset.decision));
+    else if (button.classList.contains('factory-event-continue') && playback?.eventPhase === 'feedback') {
+      playback.eventPhase = null;
+      feedback(`判断完成 ${playback.challenge.index}/3，继续出发！`); updateControls();
+      get('.factory-pause').focus({ preventScroll: true });
+    }
+    else if (button.classList.contains('factory-retry') && playback?.finished) startRoad(playback.outcome.route);
+    else if (button.classList.contains('factory-next') && playback?.finished) startRoad(ROADS[(ROADS.findIndex(r => r.id === playback!.outcome.route) + 1) % ROADS.length].id);
+    else if (button.dataset.view) { cutaway = button.dataset.view === 'cutaway'; persist(); updateControls(); }
     else if (button.dataset.part) { chosenPart = button.dataset.part as Part; updateControls(); }
     else if (button.dataset.option) changePart(chosenPart, button.dataset.option);
     else if (button.dataset.color) { vehicle.color = button.dataset.color; persist(); updateControls(); }
@@ -389,7 +467,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
       const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
       downloadFile(`${vehicle.name.replace(/[\\/:*?"<>|]/g, '') || '我的汽车'}-新能源海报.png`, new Blob([bytes], { type: 'image/png' }), 'image/png');
       api.notify('汽车海报已下载，也已保存到作品报告。');
-    } else if (button.classList.contains('factory-pause') && playback) { playback.paused = !playback.paused; updateControls(); }
+    } else if (button.classList.contains('factory-pause') && playback && !playback.eventPhase) { playback.paused = !playback.paused; updateControls(); }
     else if (button.classList.contains('factory-return')) { playback = null; get('.factory-result').hidden = true; feedback('回到造车工坊，挑一个新部件再试试看。'); updateControls(); }
   };
   const onInput = (event: Event) => {
@@ -398,7 +476,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     else if (target.matches('.factory-custom-color input')) { vehicle.color = target.value; updateControls(); }
   };
   const onChange = () => persist();
-  const onVisibility = () => { if (document.hidden && playback && !playback.finished) { playback.paused = true; updateControls(); } };
+  const onVisibility = () => { if (document.hidden && playback && !playback.finished && !playback.eventPhase) { playback.paused = true; updateControls(); } };
   const onPointerLeave = () => { if (dragging) { dragging = null; feedback('部件回到工位了。可以再拖一次，也可以直接点配方。'); } };
   host.addEventListener('click', onClick); host.addEventListener('input', onInput); host.addEventListener('change', onChange);
   document.addEventListener('visibilitychange', onVisibility);
@@ -431,7 +509,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     label(ctx, '让你的想法，开上路。', 43, 79, 27, '#2e4f3c', 600);
     roundRect(ctx, 792, 88, 163, 50, 14, '#fffdf4', '#d7e0cc');
     label(ctx, '我的配置', 808, 108, 12, '#778a76'); label(ctx, `${configurationCost(vehicle)} 工程币`, 808, 128, 18, '#49654c', 600);
-    drawChain(ctx, 120, false);
+    drawChain(ctx, 103, false);
     // Assembly station and hanging robotic tools.
     ctx.strokeStyle = '#b4c9b5'; ctx.lineWidth = 12; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(186, 184); ctx.lineTo(221, 227); ctx.lineTo(195, 275); ctx.stroke();
@@ -439,7 +517,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     for (const [x, y] of [[186, 184], [221, 227], [835, 184], [797, 227]]) { ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fillStyle = '#789d83'; ctx.fill(); }
     ctx.lineWidth = 1;
     roundRect(ctx, 214, 387, 597, 18, 8, '#d3dfcc', '#b4cbb6');
-    drawBody(ctx, 503, 292, vehicle, 2.9);
+    drawBody(ctx, 503, 310, vehicle, 2.45);
     roundRect(ctx, 43, 149, 191, 31, 12, '#fffdf4', '#cad8c4');
     label(ctx, vehicle.name.length > 11 ? `${vehicle.name.slice(0, 11)}…` : vehicle.name || '我的小电车', 58, 170, 15, '#4b6d56', 600);
     if (cutaway) {
@@ -473,7 +551,14 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
       const sx = snap.part === 'battery' ? 454 : snap.part === 'motor' ? 653 : 503;
       const sy = snap.part === 'body' ? 256 : 304;
       ctx.strokeStyle = '#dd9b56'; ctx.lineWidth = 3; ctx.globalAlpha = clamp(snap.remaining / .7);
-      ctx.beginPath(); ctx.ellipse(sx, sy, snap.part === 'body' ? 200 : 68, snap.part === 'body' ? 76 : 40, 0, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.beginPath();
+      if (snap.part === 'body') {
+        // Keep the installation feedback outside the taller vehicle silhouette.
+        for (const [x, y, dx, dy] of [[280, 116, 1, 1], [726, 116, -1, 1], [280, 390, 1, -1], [726, 390, -1, -1]]) {
+          ctx.moveTo(x, y + dy * 20); ctx.lineTo(x, y); ctx.lineTo(x + dx * 20, y);
+        }
+      } else ctx.ellipse(sx, sy, 68, 40, 0, 0, Math.PI * 2);
+      ctx.stroke(); ctx.globalAlpha = 1;
     }
     if (dragging) {
       const target = dragging.part === 'battery' ? { x: 454, y: 304 } : dragging.part === 'motor' ? { x: 653, y: 304 } : { x: 503, y: 256 };
@@ -494,7 +579,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     ctx.fillStyle = sky; ctx.fillRect(0, 0, 1000, 520);
     label(ctx, road.title, 43, 56, 29, '#35543f', 600); label(ctx, road.subtitle, 44, 83, 14, '#758771');
     roundRect(ctx, 725, 29, 227, 59, 14, '#fffdf2', '#d0dec9');
-    label(ctx, `${round(sample.speed)} km/h`, 745, 55, 19, '#42644d', 600);
+    label(ctx, `${playbackState.eventPhase || playbackState.paused || playbackState.finished ? 0 : round(sample.speed)} km/h`, 745, 55, 19, '#42644d', 600);
     label(ctx, `电量 ${round((batteryOf(outcome.vehicle).value * .65 - sample.energy) / batteryOf(outcome.vehicle).value * 100)}%`, 745, 77, 14, '#7a8d74');
     // Distant hills, trees, campus and a charge stop are all native 2D shapes.
     ctx.fillStyle = '#d2e3ce'; ctx.beginPath(); ctx.moveTo(0, 288); ctx.quadraticCurveTo(120, 165, 255, 289); ctx.quadraticCurveTo(425, 140, 607, 285); ctx.quadraticCurveTo(800, 186, 1000, 276); ctx.lineTo(1000, 520); ctx.lineTo(0, 520); ctx.closePath(); ctx.fill();
@@ -525,12 +610,47 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     const carX = 118 + progress * 768, carY = roadY(carX) - 20;
     ctx.save(); ctx.translate(carX, carY); if (outcome.route === 'hill') ctx.rotate(-Math.atan(.18));
     drawBody(ctx, 0, 0, outcome.vehicle, 1.15, sample.distance * .14); ctx.restore();
-    if (outcome.route === 'city') roundRect(ctx, carX - 29, carY - 31, 28, 22, 3, '#e4bd82', '#aa8a60');
+    if (outcome.route === 'city') roundRect(ctx, carX - 56, carY - 6, 25, 19, 3, '#e4bd82', '#aa8a60');
+    const activeEvent = playbackState.challenge.events[Math.min(playbackState.challenge.index, 2)];
+    if (!playbackState.finished) {
+      const markerX = clamp(carX + 130, 265, 875), markerY = roadY(markerX);
+      roundRect(ctx, markerX - 63, markerY - 124, 126, 42, 10, playbackState.eventPhase ? '#fff0cb' : '#fffdf2', '#c9ad78');
+      label(ctx, activeEvent.scene, markerX - 48, markerY - 98, 17, '#806334', 600);
+      ctx.strokeStyle = '#9a8b69'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(markerX, markerY - 82); ctx.lineTo(markerX, markerY - 27); ctx.stroke();
+      if (outcome.route === 'city') {
+        if (activeEvent.scene === '红灯停车') {
+          roundRect(ctx, markerX + 28, markerY - 84, 24, 61, 7, '#3d5350');
+          for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(markerX + 40, markerY - 72 + i * 18, 6, 0, Math.PI * 2); ctx.fillStyle = i === 0 ? '#ed8469' : '#768b75'; ctx.fill(); }
+          ctx.fillStyle = '#fffdf1'; ctx.fillRect(markerX - 42, markerY - 24, 5, 49);
+        } else if (activeEvent.scene === '减速带') {
+          for (let i = 0; i < 5; i++) roundRect(ctx, markerX - 40 + i * 18, markerY - 22, 9, 45, 2, i % 2 ? '#55645a' : '#e7bd60');
+        } else if (activeEvent.scene === '视线遮挡') {
+          drawPremiumCar(ctx, markerX + 12, markerY - 28, '#e5bd63', .85, 0, 'touring');
+        } else if (activeEvent.scene === '安全送达') {
+          roundRect(ctx, markerX - 22, markerY - 56, 40, 31, 3, '#dbb176', '#99734c');
+          roundRect(ctx, markerX + 18, markerY - 46, 29, 21, 3, '#e8c99b', '#99734c');
+        } else {
+          for (let i = 0; i < 5; i++) roundRect(ctx, markerX - 35 + i * 16, markerY - 20, 9, 44, 1, '#fffdf1');
+          ctx.fillStyle = '#d68a66'; ctx.beginPath(); ctx.arc(markerX + 10, markerY - 51, 8, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#637d8a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(markerX + 10, markerY - 42); ctx.lineTo(markerX + 10, markerY - 22); ctx.lineTo(markerX, markerY - 9); ctx.moveTo(markerX + 10, markerY - 22); ctx.lineTo(markerX + 21, markerY - 9); ctx.stroke();
+        }
+      } else if (outcome.route === 'range') {
+        roundRect(ctx, markerX - 18, markerY - 65, 36, 45, 5, '#83b8a2', '#4b7e68');
+        label(ctx, 'ϟ', markerX - 8, markerY - 34, 29, '#fffdf2', 700);
+        if (activeEvent.scene === '雨天车距') {
+          ctx.strokeStyle = '#8aaeb9'; ctx.lineWidth = 1.5;
+          for (let i = 0; i < 22; i++) { const rx = 70 + i * 41; const ry = 130 + (i % 4) * 35; ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 7, ry + 16); ctx.stroke(); }
+        }
+      } else {
+        ctx.fillStyle = '#dd9b60'; ctx.beginPath(); ctx.moveTo(markerX, markerY - 64); ctx.lineTo(markerX - 20, markerY - 24); ctx.lineTo(markerX + 20, markerY - 24); ctx.closePath(); ctx.fill();
+        label(ctx, '!', markerX - 4, markerY - 33, 21, '#fff8df', 700);
+      }
+    }
     roundRect(ctx, 40, 422, 920, 65, 16, '#f7f7ea', '#d0ddc7');
     label(ctx, `${round(sample.distance / 1000, outcome.route === 'range' ? 1 : 2)} / ${round(road.distance / 1000, 1)} km`, 62, 452, 20, '#52764e', 600);
     label(ctx, `使用 ${round(sample.energy, 2)} kWh`, 63, 475, 13, '#8a977f');
-    drawChain(ctx, 452, !playbackState.paused && !playbackState.finished);
-    label(ctx, playbackState.finished ? '试跑记录已保存' : playbackState.paused ? '已暂停 · 可以继续' : '教学加速展示', 784, 455, 12, '#7b8e72');
+    drawChain(ctx, 452, !playbackState.paused && !playbackState.finished && !playbackState.eventPhase);
+    label(ctx, playbackState.finished ? '挑战记录已保存' : playbackState.eventPhase ? '已停稳 · 请在下方选择' : playbackState.paused ? '已暂停 · 可以继续' : '前进中 · 留意路况', 784, 455, 12, '#526b4c');
     if (playbackState.finished) {
       roundRect(ctx, 372, 115, 263, 53, 20, '#fff9e8', '#ddc99c');
       label(ctx, outcome.ratio >= .999 ? '✦ 到站啦！你的小车真棒' : '✦ 有新发现，再换个搭档', 397, 148, 18, '#92733e', 600);
@@ -542,10 +662,16 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     draw(ctx) { if (playback) drawRoad(ctx, playback); else drawWorkshop(ctx); },
     update(dt) {
       if (destroyed) return;
-      if (!playback || !playback.paused) elapsed += dt;
+      if (!playback || (!playback.paused && !playback.eventPhase)) elapsed += dt;
       if (snap) { snap.remaining -= dt; if (snap.remaining <= 0) snap = null; }
-      if (playback && !playback.paused && !playback.finished) {
+      if (playback && !playback.paused && !playback.finished && !playback.eventPhase) {
         playback.elapsed = Math.min(playback.displaySeconds, playback.elapsed + dt);
+        const nextEvent = playback.challenge.events[playback.challenge.index];
+        if (nextEvent && playback.elapsed / playback.displaySeconds >= nextEvent.at) {
+          playback.elapsed = playback.displaySeconds * nextEvent.at;
+          showRoadEvent();
+          return;
+        }
         if (playback.elapsed >= playback.displaySeconds) finishRun();
       }
     },
