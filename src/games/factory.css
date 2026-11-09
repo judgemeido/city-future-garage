@@ -83,7 +83,7 @@
 .factory-option-check { width: 18px; color: #73966b; }
 .factory-body-preview { display: block; flex: 0 0 55px; width: 55px; }
 .factory-body-preview svg { display: block; width: 100%; height: auto; }
-.factory-option-coins { margin-left: auto; text-align: right; font-size: 16px; color: #a4926e; font-weight: 650; }
+.factory-option-coins { flex-shrink: 0; margin-left: auto; text-align: right; font-size: 16px; color: #a4926e; font-weight: 650; white-space: nowrap; }
 .factory-option-coins small { display: inline; padding-left: 2px; font-size: 10px; }
 .factory-part-detail { min-height: 32px; margin: 8px 0; font-size: 11px; line-height: 1.65; color: #8a987f; }
 .factory-save-row { display: flex; gap: 7px; }

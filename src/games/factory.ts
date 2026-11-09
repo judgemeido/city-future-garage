@@ -33,7 +33,7 @@ const MOTORS: MotorSpec[] = [
 const BODIES: BodySpec[] = [
   { value: 'city', title: '豆豆 · 城市轻巧车', mass: 780, drag: .58, rolling: .012, gear: 8.4, coins: 16 },
   { value: 'touring', title: '山野 · 旅行跨界车', mass: 940, drag: .69, rolling: .014, gear: 9.2, coins: 22 },
-  { value: 'sport', title: '闪电 · 流线运动型', mass: 850, drag: .52, rolling: .013, gear: 7.6, coins: 24 },
+  { value: 'sport', title: '闪电 · 电动赛车', mass: 850, drag: .52, rolling: .013, gear: 7.6, coins: 24 },
 ];
 const ROADS: Road[] = [
   { id: 'city', title: '校园快递员', subtitle: '100 kg 快递任务 · 安全送达才算酷', distance: 1200, speed: 42, grade: 0, payload: 100, seconds: 14 },
@@ -279,7 +279,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     if (document.activeElement !== customColor) customColor.value = vehicle.color;
     const options = chosenPart === 'battery' ? BATTERIES.map(b => ({ value: b.value, title: b.title, detail: `${b.value} kWh · ${b.power} kW`, coins: b.coins }))
       : chosenPart === 'motor' ? MOTORS.map(m => ({ value: m.value, title: m.title, detail: `${m.value} kW · ${m.torque} N·m`, coins: m.coins }))
-        : BODIES.map(b => ({ value: b.value, title: b.title, detail: `${b.mass} kg · ${b.value === 'city' ? '短车身，轻装出行' : b.value === 'touring' ? '高车顶，旅行行李架' : '双门溜背，运动尾翼'}`, coins: b.coins }));
+        : BODIES.map(b => ({ value: b.value, title: b.title, detail: `${b.mass} kg · ${b.value === 'city' ? '圆润短车身' : b.value === 'touring' ? '高车顶，宽敞座舱' : '开放座舱，宽大尾翼'}`, coins: b.coins }));
     get('.factory-options').innerHTML = options.map(o => `<button type="button" class="factory-option ${String(vehicle[chosenPart]) === String(o.value) ? 'is-selected' : ''}" data-option="${o.value}" aria-pressed="${String(vehicle[chosenPart]) === String(o.value)}">${chosenPart === 'body' ? `<span class="factory-body-preview" aria-hidden="true">${premiumCarSVG(vehicle.color, String(o.value))}</span>` : `<span class="factory-option-check">${String(vehicle[chosenPart]) === String(o.value) ? '✓' : '○'}</span>`}<span><strong>${o.title}</strong><small>${o.detail}</small></span><span class="factory-option-coins">${o.coins}<small>币</small></span></button>`).join('');
     get('.factory-part-detail').textContent = chosenPart === 'battery' ? 'kWh 是装多少电；kW 是供电有多快。长航电池容量更大，也更重。'
       : chosenPart === 'motor' ? '大电机需要电池供得上电。换大电机，也要看整条动力链。' : '轻车体减少负担；减速器传动比、车体阻力也会影响路测。';
@@ -412,8 +412,8 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     label(ctx, vehicle.name, 78, 184, 50, '#244839', 700);
     label(ctx, `${api.getProfile().nickname || '小工程师'}的新能源造车作品`, 80, 227, 24, '#5f796a');
     roundRect(ctx, 70, 294, 860, 394, 32, '#fffdf5', '#d3e2d3');
-    ctx.fillStyle = '#dbead7'; ctx.beginPath(); ctx.ellipse(500, 659, 300, 23, 0, 0, Math.PI * 2); ctx.fill();
-    drawBody(ctx, 500, 565, vehicle, 2.85);
+    ctx.fillStyle = '#dbead7'; ctx.beginPath(); ctx.ellipse(500, 674, 275, 15, 0, 0, Math.PI * 2); ctx.fill();
+    drawBody(ctx, 500, 590, vehicle, 2.5);
     const battery = batteryOf(vehicle), motor = motorOf(vehicle);
     label(ctx, `${bodyOf(vehicle).title} · ${configurationCost(vehicle)} 工程币`, 111, 342, 20, '#496e58');
     for (const [i, pair] of [['电池容量', `${battery.value} kWh`], ['最大供电', `${battery.power} kW`], ['电机输出', `${motor.value} kW`]].entries()) {
@@ -551,7 +551,14 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
       const sx = snap.part === 'battery' ? 454 : snap.part === 'motor' ? 653 : 503;
       const sy = snap.part === 'body' ? 256 : 304;
       ctx.strokeStyle = '#dd9b56'; ctx.lineWidth = 3; ctx.globalAlpha = clamp(snap.remaining / .7);
-      ctx.beginPath(); ctx.ellipse(sx, sy, snap.part === 'body' ? 200 : 68, snap.part === 'body' ? 76 : 40, 0, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.beginPath();
+      if (snap.part === 'body') {
+        // Keep the installation feedback outside the taller vehicle silhouette.
+        for (const [x, y, dx, dy] of [[280, 116, 1, 1], [726, 116, -1, 1], [280, 390, 1, -1], [726, 390, -1, -1]]) {
+          ctx.moveTo(x, y + dy * 20); ctx.lineTo(x, y); ctx.lineTo(x + dx * 20, y);
+        }
+      } else ctx.ellipse(sx, sy, 68, 40, 0, 0, Math.PI * 2);
+      ctx.stroke(); ctx.globalAlpha = 1;
     }
     if (dragging) {
       const target = dragging.part === 'battery' ? { x: 454, y: 304 } : dragging.part === 'motor' ? { x: 653, y: 304 } : { x: 503, y: 256 };

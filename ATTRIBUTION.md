@@ -18,4 +18,12 @@
 - TypeScript：Apache-2.0。https://github.com/microsoft/TypeScript
 - vite-plugin-singlefile：MIT。https://github.com/richardtallent/vite-plugin-singlefile
 
-依赖的完整许可证保留于安装后的 `node_modules` 和各官方项目。本项目的车、城市、角色、图标、界面插画均为代码绘制，无外部字体或远程图片依赖。
+依赖的完整许可证保留于安装后的 `node_modules` 和各官方项目。运行不依赖远程字体、图片或接口。
+
+## 车辆 2D SVG
+
+三款侧视车以 [Google Noto Emoji](https://github.com/googlefonts/noto-emoji) 的汽车、SUV、赛车 SVG 为基础，固定提交 `99701e07d3d1fe1bdbcdb14964547f0fd592966f`，原文件分别为 `2D/svg/emoji_u1f697.svg`、`emoji_u1f699.svg`、`emoji_u1f3ce.svg`。Copyright Google LLC。
+
+修改包括：镜像为向右行驶、统一可选车漆及中性色、增加旋转轮毂、适配 Canvas 和 SVG。三款俯视图及场景为项目内绘制。原始 SVG 与上游许可证保留在 `src/assets/vehicles/noto/`；六款可编辑成品位于 `src/assets/vehicles/ready/`。
+
+上游固定版本 [README 的 License 说明](https://github.com/googlefonts/noto-emoji/blob/99701e07d3d1fe1bdbcdb14964547f0fd592966f/README.md#license) 将大部分图像资源列为 Apache-2.0；同时保留该版本根目录的 OFL `LICENSE` 和上游历史版本的 `LICENSE-APACHE` 文本。来源与检查记录见 `docs/vehicle-art-redesign.md`。

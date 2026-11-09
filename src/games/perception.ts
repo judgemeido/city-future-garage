@@ -1,4 +1,5 @@
 import { createStage, drawCar, label, roundRect } from '../platform';
+import { drawPremiumTopCar } from '../car-art';
 import type { GameAPI, MountedGame } from '../types';
 import './perception.css';
 
@@ -613,7 +614,10 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
         ctx.strokeStyle = target.color; ctx.globalAlpha = .48;
         ctx.beginPath(); ctx.arc(tx, ty, 16 + Math.sin(time * 2) * 1.5, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
       }
-      roundRect(ctx, tx - (target.id === 'vehicle' ? 9 : 5), ty - 5, target.id === 'vehicle' ? 18 : 10, target.id === 'vehicle' ? 29 : 10, 3, target.color);
+      if (target.id === 'vehicle') {
+        ctx.save(); ctx.translate(tx, ty + 8); ctx.rotate(-Math.PI / 2);
+        drawPremiumTopCar(ctx, 0, 0, target.color, .35, 'city'); ctx.restore();
+      } else roundRect(ctx, tx - 5, ty - 5, 10, 10, 3, target.color);
       if (found.has(target.id) || isSelected) label(ctx, target.name, tx + 13, ty + 6, 11, target.color);
     }
     if (trial) {
@@ -626,8 +630,9 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
       ctx.strokeStyle = '#ffbf88'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(carX + 18, obstacleY + 1); ctx.lineTo(carX + 18, obstacleY + 13); ctx.moveTo(carX + 18, obstacleY + 4); ctx.lineTo(carX + 9, obstacleY + 9); ctx.moveTo(carX + 18, obstacleY + 13); ctx.lineTo(carX + 13, obstacleY + 20); ctx.stroke();
       label(ctx, '教学行人', carX + 34, obstacleY + 8, 10, '#ffbf88');
     }
-    roundRect(ctx, carX - 10, carY - 21, 20, 38, 6, api.getVehicle().color, '#b3ffea');
-    roundRect(ctx, carX - 6, carY - 14, 12, 9, 2, '#153d45');
+    const vehicle = api.getVehicle();
+    ctx.save(); ctx.translate(carX, carY); ctx.rotate(-Math.PI / 2);
+    drawPremiumTopCar(ctx, 0, 0, vehicle.color, .47, vehicle.body); ctx.restore();
     ctx.restore();
     label(ctx, trial ? 'BEV / 虚拟路测' : 'BEV / 教学鸟瞰图', x + 13, y + 22, 13, '#c0d9e7', 600);
     label(ctx, '位置与路径为教学设定', x + 13, y + h - 13, 10, '#83a8ba');
