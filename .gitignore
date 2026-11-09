@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.playwright-cli/
+.vite/
+output/
+qa/
+artifacts/
+release/
+*.zip
+.env
+.env.*
+!.env.example
