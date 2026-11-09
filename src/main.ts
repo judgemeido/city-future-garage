@@ -15,7 +15,7 @@ let mounted: MountedGame | undefined;
 let toastLast = '', toastTime = 0;
 const metadata: Record<GameId, { title: string; subtitle: string; icon: string; tag: string; description: string; short: string }> = {
   perception: { title: '汽车的超级眼睛', subtitle: '滑动、扫描、发现：换个视角看城市。', icon: 'eye', tag: 'PERCEPTION LAB · 感知', description: '打开汽车的超级视界，发现道路里的秘密。', short: '超级眼睛' },
-  factory: { title: '我的新能源车厂', subtitle: '把零件装进去，把你的想法开出来。', icon: 'car', tag: 'EV GARAGE · 创造', description: '选部件、换颜色，造一辆属于你的新能源车。', short: '造车工厂' },
+  factory: { title: '我的新能源车厂', subtitle: '造一辆有个性的车，接任务，挑战三星车手。', icon: 'car', tag: 'EV GARAGE · 创造', description: '装配三款个性小车，在途中路况挑战里争取三星。', short: '造车工厂' },
   ai: { title: '我教的 AI 小司机', subtitle: '给它一点示范，看看它学会了什么。', icon: 'ai', tag: 'AI DRIVING · 训练', description: '亲手教一个小司机，陪它在城市里练习。', short: 'AI 司机' },
   regen: { title: '刹车充电秀', subtitle: '停得漂亮，也看看能量去了哪里。', icon: 'bolt', tag: 'ENERGY TRACK · 探索', description: '轻轻刹车，让看不见的能量流动起来。', short: '能量回收' }
 };
@@ -116,7 +116,7 @@ async function saveVehiclePNG() {
   const ctx = canvas.getContext('2d')!; ctx.scale(1.5, 1.5); ctx.fillStyle = '#edf2e4'; ctx.fillRect(0, 0, 1280, 800);
   ctx.fillStyle = '#344f38'; ctx.font = '700 45px "Microsoft YaHei",sans-serif'; ctx.fillText(state.vehicle.name, 70, 96);
   ctx.font = '20px "Microsoft YaHei",sans-serif'; ctx.fillStyle = '#7e906f'; ctx.fillText(`${state.profile.nickname} · 城市未来车厂 · 我的新能源车作品`, 72, 139);
-  const img = new Image(); img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(heroIllustration(state.vehicle.color))}`;
+  const img = new Image(); img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(premiumCarSVG(state.vehicle.color, state.vehicle.body))}`;
   await img.decode(); ctx.drawImage(img, 200, 170, 890, 540);
   ctx.font = '17px "Microsoft YaHei",sans-serif'; ctx.fillStyle = '#748b61'; ctx.fillText('智驾小工程师 / 我的设计，开向未来。', 72, 750);
   canvas.toBlob(blob => { if (blob) { downloadFile(`${state.vehicle.name}-车辆作品.png`, blob); notify('车辆作品已下载'); } });

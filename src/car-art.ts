@@ -7,41 +7,47 @@ interface Profile {
 }
 const PROFILES: Record<CarBody, Profile> = {
   city: {
-    shell: 'M-84 7C-85-4-81-13-71-17L-57-21L-41-45Q-36-50-22-50L8-50Q23-50 34-40L52-23Q73-19 84-12Q90-8 90 4L87 18L-81 18Z',
-    glass: 'M-55-23L-38-44Q-35-46-25-46L7-46Q22-46 30-37L43-23Z',
-    rearGlass: 'M-54-24L-37-43Q-34-45-25-45L-11-45L-11-24Z',
-    frontGlass: 'M-6-45L7-45Q20-45 29-36L40-24L-6-24Z',
-    roof: 'M-57-21L-41-45Q-36-50-22-50L8-50Q23-50 34-40L52-23',
+    shell: 'M-84 7Q-87-8-77-18L-65-23L-53-49Q-49-57-35-57L5-57Q20-57 30-43L47-22L76-17Q90-13 90 4L87 18L-81 18Z',
+    glass: 'M-61-24L-49-48Q-46-52-35-52L4-52Q16-52 25-41L39-24Z',
+    rearGlass: 'M-59-25L-47-47Q-44-51-35-51L-15-51L-15-25Z',
+    frontGlass: 'M-10-51L4-51Q15-51 24-40L36-25L-10-25Z',
+    roof: 'M-65-23L-53-49Q-49-57-35-57L5-57Q20-57 30-43L47-22',
     belt: 'M-76-15Q-29-17 17-17Q55-17 80-11',
     rearDoor: 'M-37-21Q-41-7-37 7Q-33 12-24 13L-9 13L-9-22',
     frontDoor: 'M-7-21L39-21Q45-6 38 10Q36 13 29 13L-7 13Z',
-    rearWheel: -48, frontWheel: 53, mirror: 41,
+    rearWheel: -47, frontWheel: 51, mirror: 38,
   },
   touring: {
-    shell: 'M-88 8Q-89-8-80-16L-61-23L-46-46Q-41-50-25-50L22-50Q33-50 42-40L56-23L78-17Q93-13 93 1L90 19L-84 19Z',
-    glass: 'M-60-24L-44-44Q-40-46-26-46L21-46Q31-46 39-37L49-24Z',
-    rearGlass: 'M-58-25L-43-43Q-39-45-26-45L-8-45L-8-25Z',
-    frontGlass: 'M-3-45L20-45Q30-45 37-36L46-25L-3-25Z',
-    roof: 'M-61-23L-46-46Q-41-50-25-50L22-50Q33-50 42-40L56-23',
+    shell: 'M-89 8L-89-25L-78-55Q-76-59-67-59L20-59Q31-59 39-47L56-24L80-18Q94-14 94 1L91 20L-85 20Z',
+    glass: 'M-81-26L-73-51Q-72-54-66-54L19-54Q28-54 35-44L48-26Z',
+    rearGlass: 'M-79-27L-71-51L-65-53L-10-53L-10-27Z',
+    frontGlass: 'M-5-53L19-53Q27-53 33-43L45-27L-5-27Z',
+    roof: 'M-89-25L-78-55Q-76-59-67-59L20-59Q31-59 39-47L56-24',
     belt: 'M-81-16Q-34-18 15-18Q60-18 85-12',
     rearDoor: 'M-41-23Q-45-9-39 8Q-36 13-28 13L-6 13L-6-24',
     frontDoor: 'M-3-23L44-23Q49-7 42 10Q39 13 32 13L-3 13Z',
-    rearWheel: -52, frontWheel: 57, mirror: 46,
+    rearWheel: -55, frontWheel: 57, mirror: 46,
   },
   sport: {
-    shell: 'M-88 9Q-87-7-74-15L-45-20Q-28-43-8-46Q16-49 38-34L58-22L81-16Q93-12 93 2L90 18L-85 18Z',
-    glass: 'M-43-22Q-26-42-7-43Q13-46 34-31L47-23Z',
-    rearGlass: 'M-40-23Q-24-41-8-42L-5-24Z',
-    frontGlass: 'M0-43Q14-43 33-30L44-24L0-24Z',
-    roof: 'M-45-20Q-28-43-8-46Q16-49 38-34L58-22',
+    shell: 'M-91 10Q-91-3-78-10L-58-15L-32-29Q-15-40 3-39Q22-39 41-24L56-16L83-12Q97-9 98 3L92 18L-87 18Z',
+    glass: 'M-46-17L-28-28Q-13-36 3-35Q20-35 35-23L43-17Z',
+    rearGlass: 'M-42-18L-26-28Q-15-34-8-34L-5-18Z',
+    frontGlass: 'M0-35Q19-35 33-23L39-18L0-18Z',
+    roof: 'M-58-15L-32-29Q-15-40 3-39Q22-39 41-24L56-16',
     belt: 'M-80-14Q-28-17 22-18Q62-18 85-12',
-    rearDoor: 'M-35-20Q-38-5-34 9Q-32 12-25 13L-1 13L-3-23',
-    frontDoor: 'M1-23L42-22Q48-5 40 10Q38 13 31 13L1 13Z',
-    rearWheel: -52, frontWheel: 57, mirror: 44,
+    rearDoor: 'M-31 4L-19 1L-13 3',
+    frontDoor: 'M-4-16L40-16Q45-3 37 10Q34 13 26 13L-2 13Z',
+    rearWheel: -56, frontWheel: 61, mirror: 40,
   },
 };
 const profileFor = (body: string) => PROFILES[body as CarBody] ?? PROFILES.city;
-const windowSill = (body: string) => body === 'sport' ? 'M-43-22L47-23' : body === 'touring' ? 'M-60-24L49-24' : 'M-55-23L43-23';
+const windowSill = (body: string) => body === 'sport' ? 'M-46-17L43-17' : body === 'touring' ? 'M-81-26L48-26' : 'M-61-24L39-24';
+// Shared accessory paths keep Canvas, report thumbnails and poster artwork consistent.
+const accessories = (body: string) => body === 'touring'
+  ? ['M-65-60L-65-64L12-64L12-60', 'M-62-65Q-64-73-53-74L-7-74Q5-73 7-65Z', 'M-48-52L-48-27', 'M-85 5L-75 5L-73 14L-84 14']
+  : body === 'sport'
+    ? ['M-81-12L-81-22L-65-22L-65-15', 'M-90-23L-58-23L-58-20L-90-20Z', 'M-21 8L-12 1L-7 2L-14 10Z', 'M-30 14L37 14L41 18L-32 18Z']
+    : ['M-71-20L-68-37', 'M-30-55L3-55', 'M-79 5L-71 5'];
 const shapeCache = new Map<string, Path2D>();
 function shapeFor(data: string): Path2D {
   let shape = shapeCache.get(data);
@@ -113,7 +119,7 @@ function drawWheel(ctx: CanvasRenderingContext2D, x: number, rotation: number, s
 /** Wheels: centers y=16, radius 17. Paint and geometry remain crisp at any scale. */
 export function drawPremiumCar(ctx: CanvasRenderingContext2D, x: number, y: number, color = '#5bb89d', scale = 1, wheelRotation = 0, body = 'city') {
   const p = profileFor(body), c = palette(color), sporty = body === 'sport';
-  ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.save(); ctx.translate(x, y); ctx.scale(scale * (body === 'city' ? .9 : 1), scale); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   const shadow = ctx.createRadialGradient(0, 33, 9, 0, 33, 94);
   shadow.addColorStop(0, '#203a483c'); shadow.addColorStop(.62, '#203a4824'); shadow.addColorStop(1, '#203a4800');
   ctx.save(); ctx.translate(0, 33); ctx.scale(1, .1); circle(ctx, 0, 0, 96, shadow); ctx.restore();
@@ -150,7 +156,7 @@ export function drawPremiumCar(ctx: CanvasRenderingContext2D, x: number, y: numb
   path(ctx, p.frontDoor, undefined, c.deep, .42);
   // Thin chrome surrounds and flush handles preserve the silhouette.
   path(ctx, windowSill(body), undefined, '#b6cace', .5);
-  for (const handleX of [body === 'sport' ? -25 : -30, body === 'touring' ? 25 : 20]) {
+  for (const handleX of sporty ? [20] : [-30, body === 'touring' ? 25 : 20]) {
     rectangle(ctx, handleX, -15.1, 7.6, 1.8, .7, c.deep);
     rectangle(ctx, handleX + .6, -15.2, 6.2, .7, .3, '#d8e8e784');
   }
@@ -176,13 +182,13 @@ export function drawPremiumCar(ctx: CanvasRenderingContext2D, x: number, y: numb
   path(ctx, `M${p.rearWheel + 20} 15L${p.frontWheel - 20} 15L${p.frontWheel - 19} 18L${p.rearWheel + 18} 18Z`, '#243b46', '#68838c', .4);
   path(ctx, `M${p.rearWheel + 21} 14L${p.frontWheel - 20} 14`, undefined, '#bdd8d37d', .6);
   if (body === 'touring') {
-    path(ctx, 'M-29-51L23-51', undefined, '#263e47', 1.15);
-    path(ctx, 'M-24-52L17-52', undefined, '#b7c9cc', .55);
+    path(ctx, 'M-74-59L20-59', undefined, '#263e47', 1.15);
     path(ctx, 'M-63-24L-59-19', undefined, '#172f3c', 2.3);
   } else if (sporty) {
     path(ctx, 'M-81-16L-64-17L-57-19', undefined, '#213644', 1.15);
     path(ctx, 'M64 0L74-1', undefined, c.deep, .6);
   }
+  accessories(body).forEach((data, index) => path(ctx, data, index === 1 ? c.deep : undefined, index === 1 ? c.shade : '#314956', index === 1 ? .7 : 1.5));
   drawWheel(ctx, p.rearWheel, wheelRotation, sporty);
   drawWheel(ctx, p.frontWheel, wheelRotation, sporty);
   ctx.restore();
@@ -193,25 +199,25 @@ let svgIndex = 0;
 export function premiumCarSVG(color = '#5bb89d', body = 'city'): string {
   const p = profileFor(body), c = palette(color), id = `ev-car-${++svgIndex}`;
   const wheel = (x: number) => `<g transform="translate(${x} 16)"><circle r="17" fill="url(#${id}-tyre)" stroke="#17232c" stroke-width=".45"/><circle r="14.8" fill="#27333d" stroke="#58636c" stroke-width=".32"/><circle r="12.6" fill="url(#${id}-metal)" stroke="#edf2f5" stroke-width=".5"/><circle r="11.3" fill="#273542"/><circle r="9.6" fill="#7c8a94"/><rect x="6.8" y="-4.1" width="3.6" height="8.2" rx="1.1" fill="${body === 'sport' ? '#c45d48' : '#bccbca'}"/>${Array.from({ length: 10 }, (_, i) => `<g transform="rotate(${i * 36})"><path d="M-1.15-2.5L-2.5-10.9Q-1.6-12.2-.35-12.15L1.7-3.1Z" fill="url(#${id}-metal)" stroke="#a7b8c6" stroke-width=".23"/><path d="M.65-3.1L3.3-10.65L4.05-10.2L2.15-2.5Z" fill="#e4ecf1"/></g>`).join('')}<circle r="3.1" fill="url(#${id}-metal)" stroke="#4b6374" stroke-width=".5"/><circle r="1.9" fill="#2b4352"/><path d="M-.8.65L0-.7L.8.65" fill="none" stroke="#b8dcd4" stroke-width=".45"/></g>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-106 -64 212 112" role="img" aria-label="现代新能源${body === 'touring' ? '跨界旅行' : body === 'sport' ? '溜背运动' : '都市掀背'}车" fill="none" stroke-linejoin="round" stroke-linecap="round"><defs>
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-106 -82 212 130" role="img" aria-label="现代新能源${body === 'touring' ? '跨界旅行' : body === 'sport' ? '溜背运动' : '都市掀背'}车" fill="none" stroke-linejoin="round" stroke-linecap="round"><defs>
     <linearGradient id="${id}-paint" x1="0" y1="-51" x2="0" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="${c.pale}"/><stop offset=".15" stop-color="${c.light}"/><stop offset=".4" stop-color="${c.base}"/><stop offset=".56" stop-color="${c.light}"/><stop offset=".63" stop-color="${c.base}"/><stop offset=".88" stop-color="${c.shade}"/><stop offset="1" stop-color="${c.deep}"/></linearGradient>
     <linearGradient id="${id}-glass" x1="-30" y1="-47" x2="28" y2="-21" gradientUnits="userSpaceOnUse"><stop stop-color="#5d7b8b"/><stop offset=".31" stop-color="#294b60"/><stop offset=".67" stop-color="#153342"/><stop offset="1" stop-color="#344e58"/></linearGradient>
     <linearGradient id="${id}-metal"><stop stop-color="#f3f6f8"/><stop offset=".32" stop-color="#bbc8d2"/><stop offset=".57" stop-color="#6b7f8f"/><stop offset="1" stop-color="#d5e0e8"/></linearGradient>
     <radialGradient id="${id}-tyre" cx=".38" cy=".32"><stop stop-color="#56616a"/><stop offset=".64" stop-color="#242d35"/><stop offset=".91" stop-color="#141b21"/><stop offset="1" stop-color="#2e3840"/></radialGradient>
     <clipPath id="${id}-shell"><path d="${p.shell}"/></clipPath><clipPath id="${id}-windows"><path d="${p.glass}"/></clipPath>
-    </defs><ellipse cx="1" cy="33" rx="89" ry="5.8" fill="#203a48" opacity=".17"/><rect x="-74" y="10" width="153" height="8.2" rx="3" fill="#202e38"/><path d="${p.shell}" fill="url(#${id}-paint)" stroke="${c.deep}" stroke-width=".7"/>
+    </defs><g transform="scale(${body === 'city' ? '.9' : '1'} 1)"><ellipse cx="1" cy="33" rx="89" ry="5.8" fill="#203a48" opacity=".17"/><rect x="-74" y="10" width="153" height="8.2" rx="3" fill="#202e38"/><path d="${p.shell}" fill="url(#${id}-paint)" stroke="${c.deep}" stroke-width=".7"/>
     <g clip-path="url(#${id}-shell)"><path d="M-87-15Q-20-12 32-14Q64-17 94-10L95 6Q39-2-8 1Q-43 4-88 7Z" fill="#fff" opacity=".15"/><path d="M-87 7Q-14 17 93 1L94 22L-90 22Z" fill="#173a44" opacity=".19"/><path d="M-74-12Q-20-14 25-14Q61-15 80-9" stroke="#ffffff9e" stroke-width=".45"/>${[p.rearWheel, p.frontWheel].map(x => `<circle cx="${x}" cy="16" r="19" fill="#182933" stroke="${c.light}" stroke-width=".65"/>`).join('')}</g>
     <path d="${p.glass}" fill="#172c39" stroke="#273e4b" stroke-width=".55"/><path d="${p.rearGlass}" fill="url(#${id}-glass)"/><path d="${p.frontGlass}" fill="url(#${id}-glass)"/><g clip-path="url(#${id}-windows)"><path d="M-38-53L-21-53L12-16L2-16Z" fill="#d5f2fb" opacity=".17"/><path d="M10-52L15-52L46-17L39-17Z" fill="#e5f6ff" opacity=".32"/></g>
     <path d="${p.roof}" stroke="#ffffff9c" stroke-width=".65"/><path d="${p.belt}" stroke="${c.deep}" stroke-width=".55"/><path d="${p.rearDoor}" stroke="${c.deep}" stroke-width=".38"/><path d="${p.frontDoor}" stroke="${c.deep}" stroke-width=".42"/><path d="${windowSill(body)}" stroke="#b6cace" stroke-width=".5"/><rect x="-30" y="-15.1" width="7.6" height="1.8" rx=".7" fill="${c.deep}"/><rect x="20" y="-15.1" width="7.6" height="1.8" rx=".7" fill="${c.deep}"/>
     <rect x="-75" y="-7.4" width="8.5" height="7.5" rx="1.6" fill="${c.base}" stroke="${c.deep}" stroke-width=".4"/><path d="M-73.5-5.7L-68-5.7" stroke="${c.light}" stroke-width=".5"/><path d="M${p.mirror - 3}-22L${p.mirror + 2}-16L${p.mirror + 6}-18L${p.mirror + 3}-23Z" fill="#203b46"/><path d="M${p.mirror}-25Q${p.mirror + 3}-29 ${p.mirror + 9}-26L${p.mirror + 12}-23Q${p.mirror + 11}-20 ${p.mirror + 7}-20L${p.mirror}-22Z" fill="${c.light}" stroke="${c.deep}" stroke-width=".5"/>
     <path d="M-83-11L-78-12L-77-4L-84-3Z" fill="#702c30"/><path d="M-83-10L-78-11L-77-8L-83-7Z" fill="#ff8f80"/><path d="M-85 6L-77 6L-76 13L-83 15Z" fill="#2a3c45"/><path d="M72-13L86-10L87-6L74-8Z" fill="#253c47"/><path d="M73-12L85-9" stroke="#ecfbff" stroke-width="1.35"/><path d="M85-1L90 0L88 7L82 7Z" fill="#263b45"/><path d="M78 13L89 11L87 16L77 17Z" fill="#1b303c"/><path d="M${p.rearWheel + 20} 15L${p.frontWheel - 20} 15L${p.frontWheel - 19} 18L${p.rearWheel + 18} 18Z" fill="#243b46" stroke="#68838c" stroke-width=".4"/>
-    ${body === 'touring' ? '<path d="M-29-51L23-51" stroke="#263e47" stroke-width="1.15"/>' : body === 'sport' ? '<path d="M-81-16L-64-17L-57-19" stroke="#213644" stroke-width="1.15"/>' : ''}${wheel(p.rearWheel)}${wheel(p.frontWheel)}</svg>`;
+    ${accessories(body).map((data, index) => `<path d="${data}" fill="${index === 1 ? c.deep : 'none'}" stroke="${index === 1 ? c.shade : '#314956'}" stroke-width="${index === 1 ? '.7' : '1.5'}"/>`).join('')}${wheel(p.rearWheel)}${wheel(p.frontWheel)}</g></svg>`;
 }
 
 /** Compact overhead car, +x is forward; useful for BEV and miniature road maps. */
 export function drawPremiumTopCar(ctx: CanvasRenderingContext2D, x: number, y: number, color = '#5bb89d', scale = 1, body = 'city') {
   const c = palette(color), touring = body === 'touring', sport = body === 'sport';
-  ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.save(); ctx.translate(x, y); ctx.scale(scale * (body === 'city' ? .88 : 1), scale); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.save(); ctx.shadowColor = '#152c3c3b'; ctx.shadowBlur = 4; rectangle(ctx, -40, -22, 82, 45, 13, '#152c3c1f'); ctx.restore();
   for (const wx of [-26, 25]) for (const wy of [-24.7, 24.7]) {
     rectangle(ctx, wx - 7, wy - 2.4, 14, 4.8, 1.4, '#182936', '#4a5c67', .5);
@@ -252,6 +258,11 @@ export function drawPremiumTopCar(ctx: CanvasRenderingContext2D, x: number, y: n
   path(ctx, 'M27-13Q35-10 35 10L27 13', undefined, c.shade, .45);
   if (touring) {
     path(ctx, 'M-25-18L11-16M-25 18L11 16', undefined, '#b0c3c9', .55);
+    rectangle(ctx, -24, -12, 29, 24, 5, c.deep, '#89a69e', .8);
+    path(ctx, 'M-18-9L-18 9M-11-9L-11 9M-4-9L-4 9', undefined, '#789c94', .7);
+  } else if (sport) {
+    rectangle(ctx, -35, -25, 4, 50, 1, '#243e4b', c.shade, .5);
+    path(ctx, 'M23-3L37-3M23 3L37 3', undefined, c.pale, 1.5);
   }
   ctx.restore();
 }
