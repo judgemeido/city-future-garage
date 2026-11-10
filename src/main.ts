@@ -1,25 +1,16 @@
 import './styles.css';
-import { mountPerception } from './games/perception';
-import { mountFactory } from './games/factory';
-import { mountAI } from './games/ai';
-import { mountRegen } from './games/regen';
+import { GAME_META as metadata, MAX_SCORE } from './game-catalog';
+import { mounts } from './game-registry';
 import { downloadFile, escapeHTML } from './platform';
 import { heroIllustration, icon } from './visuals';
 import { premiumCarSVG, vehicleSVG } from './car-art';
 import { GAME_IDS, loadState, persist, score, totalScore, sanitizeVehicle } from './store';
-import type { AppState, GameAPI, GameId, MountedGame, MountGame } from './types';
+import type { AppState, GameAPI, GameId, MountedGame } from './types';
 
 const state: AppState = loadState();
 const app = document.querySelector<HTMLDivElement>('#app')!;
 let mounted: MountedGame | undefined;
-let toastLast = '', toastTime = 0;
-const metadata: Record<GameId, { title: string; subtitle: string; icon: string; tag: string; description: string; short: string }> = {
-  perception: { title: '汽车的超级眼睛', subtitle: '滑动、扫描、发现：换个视角看城市。', icon: 'eye', tag: 'PERCEPTION LAB · 感知', description: '打开汽车的超级视界，发现道路里的秘密。', short: '超级眼睛' },
-  factory: { title: '我的新能源车厂', subtitle: '造一辆有个性的车，接任务，挑战三星车手。', icon: 'car', tag: 'EV GARAGE · 创造', description: '装配三款个性小车，在途中路况挑战里争取三星。', short: '造车工厂' },
-  ai: { title: '我教的 AI 小司机', subtitle: '给它一点示范，看看它学会了什么。', icon: 'ai', tag: 'AI DRIVING · 训练', description: '亲手教一个小司机，陪它在城市里练习。', short: 'AI 司机' },
-  regen: { title: '刹车充电秀', subtitle: '停得漂亮，也看看能量去了哪里。', icon: 'bolt', tag: 'ENERGY TRACK · 探索', description: '轻轻刹车，让看不见的能量流动起来。', short: '能量回收' }
-};
-const mounts: Record<GameId, MountGame> = { perception: mountPerception, factory: mountFactory, ai: mountAI, regen: mountRegen };
+let toastLast = '', toastTime = 0, storageWarning = 0;
 const toastRegion = document.createElement('div'); toastRegion.className = 'toast-region'; toastRegion.setAttribute('aria-live', 'polite'); document.body.append(toastRegion);
 function notify(message: string) {
   const now = Date.now(); if (message === toastLast && now - toastTime < 1800) return;
@@ -63,48 +54,51 @@ const api: GameAPI = {
     if (next <= previous + .001) return;
     const before = score(state.progress[game]);
     state.progress[game].awards[key] = { points: next, label };
-    persist(state); updateProgressUI();
+    saveState(); updateProgressUI();
     const increase = score(state.progress[game]) - before;
     if (increase > 0) notify(`${label} · +${increase} 积分`);
   },
   complete(game) {
     if (state.progress[game].completed) return;
-    state.progress[game].completed = true; persist(state); updateProgressUI(); notify(`${metadata[game].short}体验章，收好啦！`);
+    state.progress[game].completed = true; saveState(); updateProgressUI(); notify(`${metadata[game].short}体验章，收好啦！`);
   },
-  record(game, data) { state.progress[game].data = { ...state.progress[game].data, ...data }; persist(state); },
+  record(game, data) { state.progress[game].data = { ...state.progress[game].data, ...data }; saveState(); },
   getRecord(game) { return structuredClone(state.progress[game].data); },
-  saveImage(game, image) { if (image.startsWith('data:image/')) { state.progress[game].image = image; persist(state); } },
+  saveImage(game, image) { if (image.startsWith('data:image/')) { state.progress[game].image = image; state.progress[game].data.imageSummary = state.progress[game].data.summary; saveState(); } },
   notify,
+  reducedMotion: () => state.reducedMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   getVehicle: () => ({ ...state.vehicle }),
-  setVehicle(vehicle) { state.vehicle = sanitizeVehicle(vehicle); persist(state); },
+  setVehicle(vehicle) { state.vehicle = sanitizeVehicle(vehicle); saveState(); },
   getProfile: () => ({ ...state.profile })
 };
 function sidebar(active: string): string {
   const nav = (id: string, name: string, symbol: string) => `<a class="nav-button ${active === id ? 'active' : ''}" href="#${id}" aria-label="${name}" ${active === id ? 'aria-current="page"' : ''}>${icon(symbol)}<span>${name}</span></a>`;
-  return `<aside class="sidebar"><a class="brand-mark" href="#home" aria-label="城市未来车厂首页">未</a><nav class="side-nav">${nav('home', '体验大厅', 'home')}${GAME_IDS.map(id => nav(id, metadata[id].short, metadata[id].icon)).join('')}${nav('report', '我的作品', 'report')}</nav><div class="sidebar-bottom"><button class="nav-button" data-action="sound" aria-label="${state.muted ? '开启音效' : '关闭音效'}">${icon(state.muted ? 'muted' : 'sound', 20)}<span>${state.muted ? '音效关闭' : '音效开启'}</span></button><button class="nav-button" data-action="profile">${icon('settings', 20)}<span>我的工位</span></button></div></aside>`;
+  return `<aside class="sidebar"><a class="brand-mark" href="#home" aria-label="城市未来车厂首页">未</a><nav class="side-nav">${nav('home', '体验大厅', 'home')}${GAME_IDS.map(id => nav(id, metadata[id].short, metadata[id].icon)).join('')}${nav('report', '我的作品', 'report')}</nav><div class="sidebar-bottom"><button class="nav-button" data-action="motion" aria-label="切换减少动效">${icon('eye',20)}<span>${state.reducedMotion ? '减少动效' : '完整动效'}</span></button><button class="nav-button" data-action="sound" aria-label="${state.muted ? '开启音效' : '关闭音效'}">${icon(state.muted ? 'muted' : 'sound', 20)}<span>${state.muted ? '音效关闭' : '音效开启'}</span></button><button class="nav-button" data-action="profile">${icon('settings', 20)}<span>我的工位</span></button></div></aside>`;
 }
 function header(page: string): string {
   const title = page === 'home' ? '体验大厅' : page === 'report' ? '我的作品' : metadata[page as GameId].short;
-  return `<header class="topbar"><div class="breadcrumb"><b>城市未来车厂</b><span>/</span><span>${title}</span></div><div class="topbar-actions"><div class="score-pill">${icon('star', 14)}<b data-total-score>${totalScore(state)}</b><span>/ 400 成就积分</span></div><button class="profile-button" data-action="profile"><span class="avatar">${icon('person', 17)}</span><span class="profile-copy"><strong data-profile-name>${escapeHTML(state.profile.nickname)}</strong><span>工位 <span data-workstation>${escapeHTML(state.profile.workstation)}</span></span></span></button></div></header>`;
+  return `<header class="topbar"><div class="breadcrumb"><b>城市未来车厂</b><span>/</span><span>${title}</span></div><div class="topbar-actions"><div class="score-pill">${icon('star', 14)}<b data-total-score>${totalScore(state)}</b><span>/ ${MAX_SCORE} 成就积分</span></div><button class="profile-button" data-action="profile"><span class="avatar">${icon('person', 17)}</span><span class="profile-copy"><strong data-profile-name>${escapeHTML(state.profile.nickname)}</strong><span>工位 <span data-workstation>${escapeHTML(state.profile.workstation)}</span></span></span></button></div></header>`;
 }
-function footer() { return `<footer class="site-footer"><span class="footer-label">城市未来车厂 · 智驾小工程师</span><span>四款独立体验 · 积分鼓励探索 · 教学仿真</span></footer>`; }
+function footer() { return `<footer class="site-footer"><span class="footer-label">城市未来车厂 · 智驾小工程师</span><span>${GAME_IDS.length}款独立体验 · 积分鼓励探索 · 教学仿真</span></footer>`; }
 function cardArt(id: GameId): string {
   const common = 'viewBox="0 0 320 170" role="img"';
   if (id === 'perception') return `<svg ${common} aria-label="感知扫描道路插画"><rect width="320" height="170" fill="#dce5dc"/><rect x="142" width="80" height="170" fill="#2f4853"/><path d="M182 0v170" stroke="#a2d2c1" stroke-width="2" stroke-dasharray="8 8"/><g fill="#aac0b3"><rect x="26" y="56" width="71" height="103" rx="4"/><rect x="102" y="90" width="28" height="67" rx="3"/><rect x="243" y="29" width="49" height="128" rx="4"/></g><g transform="translate(162 105) rotate(-90)"><svg x="-25" y="-16" width="50" height="32">${vehicleSVG('#80cca2', 'city', 'top')}</svg></g><g transform="translate(209 57) rotate(90)"><svg x="-22" y="-14" width="44" height="28">${vehicleSVG('#e8d590', 'touring', 'top')}</svg></g><path d="M13 129h294" stroke="#c3d2c6" stroke-width="18"/><g fill="none" stroke="#2e9673" stroke-width="1.5"><rect x="144" y="79" width="37" height="54" rx="3"/><rect x="193" y="34" width="32" height="46" rx="3"/><path d="m148 96 39-33m-33 12 40-33" opacity=".45"/></g><circle cx="171" cy="98" r="46" stroke="#2e9673" fill="#64d7a414" stroke-dasharray="3 4"/><path d="M171 46v104" stroke="#fbffeb" stroke-width="2"/><circle cx="171" cy="98" r="10" fill="#eff9eb"/><path d="m168 94 7 4-7 4" stroke="#619173" fill="none"/></svg>`;
   if (id === 'factory') return `<svg ${common} aria-label="新能源车工厂插画"><rect width="320" height="170" fill="#eee6d6"/><path d="M22 138h276" stroke="#cdbd9d" stroke-width="2"/><path d="M37 52h50v75m168-75h28v75" fill="none" stroke="#d7c8aa" stroke-width="2"/><g fill="#faf7ed" stroke="#cbbc9b"><rect x="33" y="39" width="45" height="28" rx="5"/><rect x="248" y="30" width="40" height="36" rx="5"/></g><svg x="40" y="30" width="244" height="129">${premiumCarSVG('#dfa158', 'touring')}</svg><path d="M103 20v21m113-21v21" stroke="#b59a6b" stroke-width="1.5" stroke-dasharray="3 4"/><circle cx="103" cy="19" r="5" fill="#c4a96e"/><circle cx="216" cy="19" r="5" fill="#c4a96e"/></svg>`;
   if (id === 'ai') return `<svg ${common} aria-label="AI小司机插画"><rect width="320" height="170" fill="#e1e3ed"/><path d="M0 132c95-80 175 20 320-71" stroke="#aeb6d0" stroke-width="44" fill="none"/><path d="M0 132c95-80 175 20 320-71" stroke="#f1f0f7" stroke-width="2" stroke-dasharray="8 9" fill="none"/><g transform="translate(88 32)"><rect x="26" y="17" width="91" height="66" rx="24" fill="#f9f8f3" stroke="#9ba1c5" stroke-width="2"/><path d="M71 6v12" stroke="#868dac" stroke-width="2"/><circle cx="71" cy="5" r="5" fill="#a1a8d6"/><rect x="40" y="35" width="64" height="29" rx="14" fill="#69729b"/><circle cx="55" cy="48" r="5" fill="#d7f0da"/><circle cx="89" cy="48" r="5" fill="#d7f0da"/><path d="M66 65q6 6 12 0" stroke="#8695ad" fill="none"/><rect x="15" y="41" width="11" height="24" rx="5" fill="#bcc1db"/><rect x="117" y="41" width="11" height="24" rx="5" fill="#bcc1db"/></g><rect x="217" y="25" width="72" height="33" rx="10" fill="#faf9f3"/><text x="235" y="46" font-size="12" fill="#8186a3" font-family="sans-serif">我学会啦!</text><path d="m232 58-8 9 19-9" fill="#faf9f3"/></svg>`;
+  if (['parking','repair','charging','grip'].includes(id)) return newCardArt(id);
   return `<svg ${common} aria-label="能量回收插画"><rect width="320" height="170" fill="#e3ead2"/><path d="M22 139h281" stroke="#a4b785" stroke-width="2"/><svg x="18" y="35" width="228" height="120">${premiumCarSVG('#88a955', 'sport')}</svg><rect x="252" y="62" width="31" height="63" rx="6" fill="#f9fbed" stroke="#8da262" stroke-width="1.4"/><rect x="261" y="57" width="13" height="4" rx="2" fill="#8da262"/><rect x="257" y="89" width="21" height="30" rx="3" fill="#afc875"/><path d="m268 72-9 12h8l-3 11 11-15h-8z" fill="#7d9a45"/><path d="M171 32q50-22 79 8m-2-12 7 15-17-3" stroke="#90ab5c" stroke-width="2" fill="none" stroke-dasharray="5 4"/></svg>`;
 }
 function renderHome() {
-  return `<section class="hero"><div class="hero-copy"><div class="eyebrow">FUTURE CITY GARAGE · 城市科普体验</div><h1>把未来，<br>开进<span>你的城市。</span></h1><p>看见汽车眼中的世界，造车、教 AI、探索能量。<br>今天，你就是城市里的小工程师。</p><div class="hero-actions"><a href="#perception" class="btn btn-primary">开始我的体验 ${icon('arrow', 17)}</a><span class="hero-footnote">四个世界，随时出发</span></div></div>${heroIllustration(state.vehicle.color, state.vehicle.body)}</section><div class="section-heading"><div><h2>选一个世界，开始探索</h2><p>不需要编程基础 · 不设通关分数 · 每次尝试都有收获</p></div><span class="section-note"><span data-stamp-count>${GAME_IDS.filter(id => state.progress[id].completed).length}</span> / 4 枚体验章</span></div><div class="games-grid">${GAME_IDS.map((id, i) => `<a href="#${id}" class="game-card" data-game-card="${id}"><div class="card-art">${cardArt(id)}<span class="card-number">0${i + 1}</span><span class="card-badge">独立体验</span></div><div class="card-content"><span class="card-tag">${metadata[id].tag}</span><h3>${metadata[id].title}</h3><p>${metadata[id].description}</p><div class="card-bottom"><span>进入体验 <span class="card-score">· <span data-score="${id}">${score(state.progress[id])}</span> 分</span></span><span class="card-go">${icon('arrow', 14)}</span></div></div></a>`).join('')}</div><div class="class-banner"><div class="class-banner-main"><span class="class-banner-icon">${icon('report', 23)}</span><div><strong>今天的工程师作品，记得带回家。</strong><p>你的车辆、AI 司机、体验章和发现，会变成专属电子报告。</p></div></div><a href="#report" class="btn btn-small">查看我的作品 ${icon('arrow', 14)}</a></div>`;
+  return `<section class="hero"><div class="hero-copy"><div class="eyebrow">FUTURE CITY GARAGE · 城市科普体验</div><h1>把未来，<br>开进<span>你的城市。</span></h1><p>造车、教 AI、泊车、接线、扫描、雨天实验。<br>今天，你就是城市里的小工程师。</p><div class="hero-actions"><a href="#perception" class="btn btn-primary">开始我的体验 ${icon('arrow', 17)}</a><span class="hero-footnote">八个世界，随时出发</span></div></div>${heroIllustration(state.vehicle.color, state.vehicle.body)}</section><div class="section-heading"><div><h2>选一个世界，开始探索</h2><p>不需要编程基础 · 不设通关分数 · 每次尝试都有收获</p></div><span class="section-note"><span data-stamp-count>${GAME_IDS.filter(id => state.progress[id].completed).length}</span> / ${GAME_IDS.length} 枚体验章</span></div><div class="games-grid">${GAME_IDS.map((id, i) => `<a href="#${id}" class="game-card" data-game-card="${id}"><div class="card-art">${cardArt(id)}<span class="card-number">0${i + 1}</span><span class="card-badge">独立体验</span></div><div class="card-content"><span class="card-tag">${metadata[id].tag}</span><h3>${metadata[id].title}</h3><p>${metadata[id].description}</p><div class="card-bottom"><span>进入体验 <span class="card-score">· <span data-score="${id}">${score(state.progress[id])}</span> 分</span></span><span class="card-go">${icon('arrow', 14)}</span></div></div></a>`).join('')}</div><div class="class-banner"><div class="class-banner-main"><span class="class-banner-icon">${icon('report', 23)}</span><div><strong>今天的工程师作品，记得带回家。</strong><p>你的车辆、AI 司机、体验章和发现，会变成专属电子报告。</p></div></div><a href="#report" class="btn btn-small">查看我的作品 ${icon('arrow', 14)}</a></div>`;
 }
 function reportCard(id: GameId): string {
   const p = state.progress[id], data = p.data;
+  const status = p.completed ? '已体验' : Object.keys(data).length || score(p) ? '进行中' : '还没体验';
   const entries = Array.isArray(data.report) ? (data.report as {label: unknown; value: unknown}[]).filter(item => item && 'label' in item && 'value' in item).slice(0, 12) : [];
-  return `<article class="report-card"><div class="report-card-heading"><h2>${metadata[id].title}</h2><span class="stamp-chip ${p.completed ? 'complete' : ''}">${p.completed ? '已体验' : '还没体验'} · ${score(p)} 分</span></div>${p.image ? `<img src="${p.image}" alt="${metadata[id].title}的个人作品"/>` : `<div class="report-placeholder">${icon(metadata[id].icon, 34)}<span>${p.completed ? '体验已记录，可以回去保存一张作品图' : '这个世界等你来探索'}</span></div>`}<div class="report-card-content"><p>${escapeHTML(data.summary || (p.completed ? '一次尝试，一个新发现。' : '随时可以进入体验，之后再更新报告。'))}</p>${entries.map(item => `<div class="report-record"><span>${escapeHTML(item.label)}</span><b>${escapeHTML(item.value)}</b></div>`).join('')}${!entries.length ? `<div class="report-record"><span>我的记录</span><b>${p.completed ? '体验章已收集' : '还没体验'}</b></div>` : ''}</div></article>`;
+  return `<article class="report-card"><div class="report-card-heading"><h2>${metadata[id].title}</h2><span class="stamp-chip ${p.completed ? 'complete' : ''}">${status} · ${score(p)} 分</span></div>${p.image ? `<img src="${p.image}" alt="${metadata[id].title}的个人作品"/>${data.imageSummary ? `<p class="report-image-caption">已保存画面：${escapeHTML(data.imageSummary)}</p>` : ''}` : `<div class="report-placeholder">${icon(metadata[id].icon, 34)}<span>${p.completed ? '体验已记录，可以回去保存一张作品图' : status === '进行中' ? '已开始探索，继续完成体验' : '这个世界等你来探索'}</span></div>`}<div class="report-card-content"><p>${escapeHTML(data.summary || (p.completed ? '一次尝试，一个新发现。' : '随时可以进入体验，之后再更新报告。'))}</p>${entries.map(item => `<div class="report-record"><span>${escapeHTML(item.label)}</span><b>${escapeHTML(item.value)}</b></div>`).join('')}${!entries.length ? `<div class="report-record"><span>我的记录</span><b>${p.completed ? '体验章已收集' : status}</b></div>` : ''}</div></article>`;
 }
 function renderReport() {
-  return `<section class="report-hero"><div><div class="eyebrow">MY ENGINEERING JOURNEY</div><h1>${escapeHTML(state.profile.nickname)}的未来车档案</h1><p>工位 ${escapeHTML(state.profile.workstation)} · 车辆「${escapeHTML(state.vehicle.name)}」<br>收集了 ${GAME_IDS.filter(id => state.progress[id].completed).length} 枚体验章，获得 ${totalScore(state)} / 400 成就积分。</p><div class="report-actions"><button class="btn btn-primary" data-action="download-report">${icon('download', 16)} 下载电子报告</button><button class="btn" data-action="print-report">打印 / 保存 PDF</button><button class="btn" data-action="vehicle-png">下载车辆作品</button></div></div><div class="report-cover-art">${heroIllustration(state.vehicle.color, state.vehicle.body)}</div></section><div class="report-grid">${GAME_IDS.map(reportCard).join('')}</div><p class="report-disclaimer">成就积分记录参与与探索；科学记录来自教学仿真，不代表真实车辆测评。感知照片：Kakidai / Wikimedia Commons，CC BY-SA 4.0；人工标注与教学叠层。报告可以随时下载，未体验项目会保留真实状态。</p>`;
+  return `<section class="report-hero"><div><div class="eyebrow">MY ENGINEERING JOURNEY</div><h1>${escapeHTML(state.profile.nickname)}的未来车档案</h1><p>工位 ${escapeHTML(state.profile.workstation)} · 车辆「${escapeHTML(state.vehicle.name)}」<br>收集了 ${GAME_IDS.filter(id => state.progress[id].completed).length} 枚体验章，获得 ${totalScore(state)} / ${MAX_SCORE} 成就积分。</p><div class="report-actions"><button class="btn btn-primary" data-action="download-report">${icon('download', 16)} 下载电子报告</button><button class="btn" data-action="print-report">打印 / 保存 PDF</button><button class="btn" data-action="vehicle-png">下载车辆作品</button></div></div><div class="report-cover-art">${heroIllustration(state.vehicle.color, state.vehicle.body)}</div></section><div class="report-grid">${GAME_IDS.map(reportCard).join('')}</div><p class="report-disclaimer">成就积分记录参与与探索；科学记录来自教学仿真，不代表真实车辆测评。感知照片：Kakidai / Wikimedia Commons，CC BY-SA 4.0；人工标注与教学叠层。报告可以随时下载，未体验项目会保留真实状态。</p>`;
 }
 function saveReport() {
   const printable = `<style>body{margin:0;background:#eef1e9;color:#283c2d;font-family:"Microsoft YaHei",sans-serif}.document{max-width:1080px;margin:auto;padding:36px}.report-hero{background:#e4ecd9;border-radius:20px;padding:26px;display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}.report-hero h1{font-size:26px}.report-hero p{font-size:13px;line-height:1.8}.eyebrow{font-size:10px;color:#789365;letter-spacing:2px}.report-cover-art{width:210px}.report-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.report-card{background:#fffef9;border:1px solid #dce5d4;border-radius:18px;overflow:hidden;break-inside:avoid}.report-card-heading{display:flex;justify-content:space-between;padding:16px 20px;gap:10px;align-items:center}.report-card-heading h2{font-size:16px;margin:0}.stamp-chip{font-size:10px;color:#799164}.report-card img{width:100%;display:block}.report-card-content{padding:17px 20px}.report-card-content p{font-size:12px;line-height:1.8;color:#718567}.report-record{display:flex;justify-content:space-between;gap:20px;border-top:1px solid #e3eadd;padding:9px 0;font-size:11px}.report-record span{color:#839277}.report-record b{font-weight:500}.report-placeholder{min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#879e74;background:#f3f7eb;font-size:12px}.report-actions{display:none}.report-disclaimer{font-size:10px;color:#8a9d7a;line-height:1.8}.print-button{padding:10px 17px;border:0;border-radius:9px;background:#345d3b;color:#fff;cursor:pointer;margin-bottom:16px}@media(max-width:650px){.document{padding:15px}.report-grid{grid-template-columns:1fr}.report-cover-art{display:none}}@media print{.print-button{display:none}.document{padding:0}.report-card img{max-height:160px;object-fit:contain}.report-hero{padding:15px}.report-card-content{padding:12px}}</style>`;
@@ -128,12 +122,13 @@ function showProfile() {
   dialog.querySelector('form')!.addEventListener('submit', () => {
     state.profile.nickname = (dialog.querySelector<HTMLInputElement>('#nickname')!.value.trim() || '小工程师').slice(0,20);
     state.profile.workstation = dialog.querySelector<HTMLInputElement>('#workstation')!.value.trim().slice(0,8) || '01';
-    persist(state); updateProgressUI(); if (location.hash === '#report') render(); notify('作品签名已保存');
+    saveState(); updateProgressUI(); if (location.hash === '#report') render(); notify('作品签名已保存');
   });
   dialog.querySelector('[data-cancel]')!.addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => dialog.remove()); dialog.showModal();
 }
 function render() {
+  document.documentElement.classList.toggle('reduce-motion', state.reducedMotion);
   mounted?.destroy(); mounted = undefined;
   const raw = location.hash.slice(1) || 'home';
   const page = raw === 'report' || GAME_IDS.includes(raw as GameId) ? raw : 'home';
@@ -151,11 +146,24 @@ function render() {
 app.addEventListener('click', event => {
   const action = (event.target as Element).closest<HTMLElement>('[data-action]')?.dataset.action;
   if (action === 'profile') showProfile();
-  if (action === 'sound') { state.muted = !state.muted; persist(state); const button = app.querySelector('[data-action="sound"]')!; button.innerHTML = `${icon(state.muted ? 'muted' : 'sound',20)}<span>${state.muted ? '音效关闭' : '音效开启'}</span>`; button.setAttribute('aria-label', state.muted ? '开启音效' : '关闭音效'); notify(state.muted ? '音效已关闭' : '音效已开启'); }
+  if (action === 'motion') { state.reducedMotion = !state.reducedMotion; saveState(); const button = app.querySelector('[data-action="motion"]')!; button.innerHTML = `${icon('eye',20)}<span>${state.reducedMotion ? '减少动效' : '完整动效'}</span>`; document.documentElement.classList.toggle('reduce-motion', state.reducedMotion); notify(state.reducedMotion ? '减少动效已开启，状态和结果仍清楚显示' : '完整动效已开启'); }
+  if (action === 'sound') { state.muted = !state.muted; saveState(); const button = app.querySelector('[data-action="sound"]')!; button.innerHTML = `${icon(state.muted ? 'muted' : 'sound',20)}<span>${state.muted ? '音效关闭' : '音效开启'}</span>`; button.setAttribute('aria-label', state.muted ? '开启音效' : '关闭音效'); notify(state.muted ? '音效已关闭' : '音效已开启'); }
   if (action === 'download-report') saveReport();
   if (action === 'print-report') window.print();
   if (action === 'vehicle-png') void saveVehiclePNG();
 });
 window.addEventListener('hashchange', render);
-window.addEventListener('beforeunload', () => { persist(state); mounted?.destroy(); });
+window.addEventListener('beforeunload', () => { saveState(); mounted?.destroy(); });
 render();
+
+function saveState() {
+  if (!persist(state) && Date.now() - storageWarning > 5000) {
+    storageWarning = Date.now(); notify('本机存储空间不足，截图可能未保存；请到“我的作品”立即导出报告。');
+  }
+}
+function newCardArt(id: GameId): string {
+  const colors: Record<string,string> = { parking:'#55d0ed', repair:'#efb456', charging:'#65dfad', grip:'#93cdff' };
+  const color=colors[id];
+  const shapes = id === 'parking' ? '<path d="M35 128C100 35 155 142 235 76"/><rect x="229" y="44" width="58" height="48" rx="7"/>' : id === 'repair' ? '<path d="M65 95h190"/><path d="M147 28v117"/><rect x="137" y="34" width="20" height="103" rx="5"/>' : id === 'charging' ? '<rect x="39" y="30" width="42" height="90" rx="8"/><path d="M78 62C180 10 95 153 250 112"/><rect x="237" y="100" width="28" height="22" rx="5"/>' : '<path d="M25 125C150 125 80 50 280 65"/><path d="M25 142C165 143 105 65 278 96" stroke="#eea768"/>';
+  return `<svg viewBox="0 0 320 170" role="img" aria-label="${metadata[id].title}交互插画"><rect width="320" height="170" fill="#192e3b"/><g fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round">${shapes}</g><g opacity=".25" fill="${color}"><circle cx="80" cy="60" r="27"/><circle cx="246" cy="110" r="25"/></g><svg x="100" y="54" width="123" height="67">${vehicleSVG(color, 'city', 'top')}</svg></svg>`;
+}

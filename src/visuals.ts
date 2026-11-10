@@ -1,5 +1,9 @@
 import { premiumCarSVG } from './car-art';
 export const icons: Record<string, string> = {
+  parking: '<rect x="3" y="3" width="18" height="18" rx="5"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/>',
+  plug: '<path d="M8 3v5m8-5v5M5 8h14v4a7 7 0 0 1-14 0zM12 19v3"/>',
+  repair: '<path d="M14 4a6 6 0 0 0-7 7l-4 7a2 2 0 0 0 3 3l7-5a6 6 0 0 0 7-7l-4 3-4-4z"/>',
+  rain: '<path d="M5 13a4 4 0 0 1 0-8 6 6 0 0 1 11-1 5 5 0 0 1 2 9M7 16l-2 4m8-4-2 4m8-4-2 4"/>',
   home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
   car: '<path d="m4 8 2-4h12l2 4 2 3v7H2v-7zM4 8h16M6 13h2m8 0h2M4 18v2m16-2v2"/>',
