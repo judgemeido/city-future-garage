@@ -1,14 +1,17 @@
 import { escapeHTML, label, roundRect } from '../platform';
 import { icon } from '../visuals';
 import type { GameAPI, GameId } from '../types';
+import { mountLabMedia } from './lab-media';
+import type { LabId } from './lab-photo-content';
 import './lab.css';
 
 export const clamp = (value: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, value));
 export interface Knowledge { title: string; text: string; source: string; url: string }
-export function labShell(host: HTMLElement, config: { color: string; tag: string; scenes: string[]; goals: string[]; toolbar: string; tools: string; cards: Knowledge[] }) {
-  host.innerHTML = `<div class="lab" style="--lab-color:${config.color}"><div class="lab-topline"><div class="lab-scenes" role="group" aria-label="选择场景">${config.scenes.map((name,i) => `<button data-scene="${i}" class="${i===0?'active':''}">${i+1} · ${name}</button>`).join('')}</div><p class="lab-goal" data-goal>${config.goals[0]}</p></div><section class="lab-world"><div class="lab-stage-header"><b>${config.tag}</b><span>操作触发特效 · 教学示意</span></div><div class="lab-stage"></div><div class="lab-toolbar">${config.toolbar}<button class="btn btn-small" data-reset>重开本关</button><button class="btn btn-small" data-save>保存作品</button></div><p class="lab-status" data-status aria-live="polite"></p></section><div class="lab-result" data-result hidden></div><div class="lab-extra"><details><summary>为什么会这样 · 三张知识卡</summary><div class="lab-knowledge">${config.cards.map(card=>`<article>${icon('bolt',35)}<h3>${escapeHTML(card.title)}</h3><p>${escapeHTML(card.text)}</p><p><a href="${card.url}" target="_blank" rel="noopener">${escapeHTML(card.source)} ↗</a></p></article>`).join('')}</div></details><details><summary>进阶工具与星级规则</summary>${config.tools}<p class="lab-instructions">积分：首次操作10分，三个场景各20分，有效发现20分，保存作品10分。完成核心体验可获得体验章；挑战星级单独记录。</p></details></div></div>`;
+export function labShell(host: HTMLElement, config: { id: LabId; color: string; tag: string; scenes: string[]; goals: string[]; toolbar: string; tools: string; cards: Knowledge[] }) {
+  host.innerHTML = `<div class="lab" style="--lab-color:${config.color}"><div class="lab-topline"><div class="lab-scenes" role="group" aria-label="选择场景">${config.scenes.map((name,i) => `<button data-scene="${i}" class="${i===0?'active':''}">${i+1} · ${name}</button>`).join('')}</div><p class="lab-goal" data-goal>${config.goals[0]}</p></div><section class="lab-world"><div class="lab-stage-header"><b>${config.tag}</b><span>动手实验 + 实物观察</span></div><div class="lab-workbench"><div class="lab-stage"></div><aside class="lab-photo" data-lab-media aria-label="实物照片观察"></aside></div><div class="lab-toolbar">${config.toolbar}<button class="btn btn-small" data-reset>重开本关</button><button class="btn btn-small" data-save>保存作品</button></div><p class="lab-status" data-status aria-live="polite"></p></section><div class="lab-result" data-result hidden></div><div class="lab-extra"><details><summary>为什么会这样 · 三张知识卡</summary><div class="lab-knowledge">${config.cards.map(card=>`<article>${icon('bolt',35)}<h3>${escapeHTML(card.title)}</h3><p>${escapeHTML(card.text)}</p><p><a href="${card.url}" target="_blank" rel="noopener">${escapeHTML(card.source)} ↗</a></p></article>`).join('')}</div></details><details><summary>进阶工具与星级规则</summary>${config.tools}<p class="lab-instructions">积分：首次操作10分，三个场景各20分，有效发现20分，保存作品10分。完成核心体验可获得体验章；挑战星级单独记录。</p></details></div></div>`;
   const q = <T extends HTMLElement = HTMLElement>(selector: string) => host.querySelector<T>(selector)!;
-  return { q, scene(index: number) { q('[data-goal]').textContent = config.goals[index]; host.querySelectorAll<HTMLElement>('[data-scene]').forEach(el => el.classList.toggle('active', Number(el.dataset.scene) === index)); }, status(text: string) { q('[data-status]').textContent = text; } };
+  const media = mountLabMedia(host, config.id);
+  return { q, media, scene(index: number) { media.scene(index); q('[data-goal]').textContent = config.goals[index]; host.querySelectorAll<HTMLElement>('[data-scene]').forEach(el => el.classList.toggle('active', Number(el.dataset.scene) === index)); }, status(text: string) { q('[data-status]').textContent = text; } };
 }
 
 export interface LabResult { scene: number; name: string; success: boolean; stars: number; changed: string; observed: string; learned: string; facts: { label: string; value: string }[]; comparison?: string; conditions: Record<string, number | string>; outcome: Record<string, number | string | boolean> }
@@ -18,7 +21,7 @@ export class LabJournal {
   finding: string;
   private findingKey: string;
   private dirty = false;
-  constructor(private id: GameId, private api: GameAPI, private host: HTMLElement) {
+  constructor(private id: GameId, private api: GameAPI, private host: HTMLElement, private evidence?: () => {label: string; value: string}) {
     const saved = api.getRecord(id);
     this.attempts = Array.isArray(saved.attempts) ? saved.attempts as LabResult[] : [];
     this.best = (saved.best as Record<string, number>) || {};
@@ -36,7 +39,7 @@ export class LabJournal {
   record(result = this.attempts.at(-1)) {
     this.api.record(this.id, { attempts: this.attempts, best: this.best, finding: this.finding, findingKey:this.findingKey,
       summary: result ? `${result.changed}。${result.observed}。` : '我已开始亲手操作，还在探索中。',
-      report: result ? [{ label:'我改了什么', value:result.changed }, { label:'出现了什么变化', value:result.observed }, { label:'我懂了什么', value:this.findingKey===this.resultKey(result)?this.finding:result.learned }, {label:'本次场景 / 状态',value:`${result.name} · ${result.success?'完成':result.observed.startsWith('进行中')?'进行中':'待重试'}`}, { label:'最佳挑战星级', value:Object.entries(this.best).map(([scene,stars])=>`第${Number(scene)+1}关 ${'★'.repeat(stars)}${'☆'.repeat(3-stars)}`).join(' / ') }, ...result.facts] : [{label:'体验状态',value:'进行中'}] });
+      report: result ? [...(this.evidence ? [this.evidence()] : []), { label:'我改了什么', value:result.changed }, { label:'出现了什么变化', value:result.observed }, { label:'我懂了什么', value:this.findingKey===this.resultKey(result)?this.finding:result.learned }, {label:'本次场景 / 状态',value:`${result.name} · ${result.success?'完成':result.observed.startsWith('进行中')?'进行中':'待重试'}`}, { label:'最佳挑战星级', value:Object.entries(this.best).map(([scene,stars])=>`第${Number(scene)+1}关 ${'★'.repeat(stars)}${'☆'.repeat(3-stars)}`).join(' / ') }, ...result.facts] : [...(this.evidence ? [this.evidence()] : []), {label:'体验状态',value:'进行中'}] });
   }
   show(result: LabResult) {
     const panel = this.host.querySelector<HTMLElement>('[data-result]')!; panel.hidden = false;

@@ -21,6 +21,21 @@
 
 照片分别来自东京、香港、阿姆斯特丹和旧金山。归一化框属于人工标注；距离、BEV、探测质量、波形与车辆运动均不是照片实测值。
 
+## 新增四款游戏的实物照片（2026年11月10日）
+
+- **parking-aerial.jpg**：[Aerial view of an empty car parking lot.jpg](https://commons.wikimedia.org/wiki/File:Aerial_view_of_an_empty_car_parking_lot.jpg)，摄影 **Gabriel Picard**，[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0)。
+- **charging-car.jpg**：[Electric car charging at a station during the day with the charging cable connected to the vehicle.jpg](https://commons.wikimedia.org/wiki/File:Electric_car_charging_at_a_station_during_the_day_with_the_charging_cable_connected_to_the_vehicle.jpg)，摄影 **Shixart1985**，[CC BY 2.0](https://creativecommons.org/licenses/by/2.0)。
+- **charging-station.jpg**：[Electric Car Charging Station.jpg](https://commons.wikimedia.org/wiki/File:Electric_Car_Charging_Station.jpg)，摄影 **Mokkie**，[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0)。
+- **ev-chassis.jpg**：[Tesla Motors Model S base.JPG](https://commons.wikimedia.org/wiki/File:Tesla_Motors_Model_S_base.JPG)，摄影 **Oleg Alexandrov**，[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0)。
+- **ev-chassis-side.jpg**：[Tesla Model S chassis.jpg](https://commons.wikimedia.org/wiki/File:Tesla_Model_S_chassis.jpg)，摄影 **Christiankral**，[CC BY 4.0](https://creativecommons.org/licenses/by/4.0)。
+- **tire-tread.jpg**：[2008-05-01 Tyre.jpg](https://commons.wikimedia.org/wiki/File:2008-05-01_Tyre.jpg)，摄影 **Ildar Sagdejev (Specious)**，[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0)。
+
+六张照片来自 Wikimedia Commons，使用 1280 像素宽缩放版本，完整画面等比显示；原图放大去除教学叠层。停车场航拍、充电接口与充电桩、两张实物展出底盘、汽车胎面近照分别支持泊车、充电、维修和抓地力观察。照片不经过 AI 生成或内容替换。
+
+本项目添加归一化观察点、跟手扫描、沿电缆的教学光流，以及包含本人操作画面的合成截图。照片署名、许可和原页面随页面与个人报告保留。照片及包含照片的改编图像遵循各自许可；CC BY-SA 素材的改编图像按相同许可分享。机器来源、原尺寸和处理说明见 `src/assets/lab-photos/sources.json`。
+
+照片只用于观察实物形态和位置；功率、故障读数、距离、转向与双车轨迹为游戏教学模型，不是从照片量测得到。底盘照片仅标出实际可见的壳体、总成、车轮与车架，不把未展示的传感器或控制单元当作已拍摄部件。
+
 ## 开源依赖
 
 - Phaser 3.90.0：MIT。https://github.com/phaserjs/phaser

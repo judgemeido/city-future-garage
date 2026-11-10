@@ -59,7 +59,7 @@ assert.equal(await page.locator('[data-game-card]').count(),8);assert.match(awai
       if(scene===2){await attach(0,2);await page.locator('[data-strategy="priority"]').click();await attach(1,0);}else{await drag(285,412,positions[0]-78,256);assert.equal((await data()).connections,'1');await page.locator('[data-pause]').click();const paused=(await data()).delivered;await page.waitForTimeout(200);assert.equal((await data()).delivered,paused);await attach(1,1);}
       if(scene===1){await click(265,200);await page.locator('[data-strategy="priority"]').click();const c=await cars();assert.equal(c[0].power,30);assert.equal(c[1].power,6);await shot('charging-power-flow');}
       if(scene===0){await click(positions[0]-78,256);assert.equal((await data()).connections,'1');await attach(0,0);}
-      if(!await page.locator('details').nth(1).evaluate(el=>el.open))await page.locator('details').nth(1).locator('summary').click();await page.locator('[data-speed="3"]').click();
+      if(!await page.locator('.lab-extra details').nth(1).evaluate(el=>el.open))await page.locator('.lab-extra details').nth(1).locator('summary').click();await page.locator('[data-speed="3"]').click();
       for(let i=0;i<70&&(await data()).finished!=='true';i++){
         const cs=await cars();for(let plug=0;plug<2;plug++)if(!cs.some(c=>c.connected===plug)){const next=cs.findIndex(c=>c.reachedAt===null&&c.connected===null);if(next>=0){await attach(plug,next);break;}}
         await page.waitForTimeout(150);
