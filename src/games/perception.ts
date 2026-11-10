@@ -3,6 +3,7 @@ import { drawPremiumTopCar } from '../car-art';
 import type { GameAPI, MountedGame } from '../types';
 import './perception.css';
 import { PERCEPTION_SCENES, type SceneTarget, type TargetId } from './perception-scenes';
+import { drawPerceptionWeather } from './perception-weather';
 
 type Sensor = 'camera' | 'lidar' | 'radar';
 const SENSOR_LABELS: Record<Sensor, string> = { camera: '摄像头', lidar: '激光雷达', radar: '毫米波雷达' };
@@ -532,17 +533,7 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
     }
     if (view === 'photo') { ctx.restore(); return; }
     ctx.fillStyle = `rgba(4,13,30,${(100 - config.light) / 100 * .62})`; ctx.fillRect(x, y, w, h);
-    const fog = config.fog / 100;
-    const fogGradient = ctx.createLinearGradient(0, y, 0, y + h);
-    fogGradient.addColorStop(0, `rgba(193,215,221,${fog * .72})`); fogGradient.addColorStop(1, `rgba(188,210,218,${fog * .30})`);
-    ctx.fillStyle = fogGradient; ctx.fillRect(x, y, w, h);
-    if (config.rain > 0) {
-      ctx.strokeStyle = `rgba(199,230,246,${config.rain / 100 * .65})`; ctx.lineWidth = 1;
-      for (let i = 0; i < Math.round(config.rain * .75); i++) {
-        const rx = x + ((i * 97.2 + time * 49) % w), ry = y + ((i * 56.8 + time * 220) % h);
-        ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 5, ry + 13); ctx.stroke();
-      }
-    }
+    drawPerceptionWeather(ctx, PHOTO, config.fog, config.rain, time, api.reducedMotion());
     ctx.restore();
   }
   function imageRect() {
