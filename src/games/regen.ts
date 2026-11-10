@@ -1,3 +1,4 @@
+import { nightBackdrop } from '../theme';
 import { createStage, drawCar, label, roundRect } from '../platform';
 import type { GameAPI, MountedGame } from '../types';
 import './regen.css';
@@ -81,27 +82,27 @@ export function mountRegen(host: HTMLElement, api: GameAPI): MountedGame {
   const stage = createStage(query('.regen-stage'), { label:'新能源车刹停跑道和能量回收动画', width:1000, height:520,
     update(dt) { if (document.hidden) return; accumulator += dt; while(accumulator>=1/120){step(1/120);accumulator-=1/120;} lastUi += dt; if(lastUi>.1){updateUI();lastUi=0;} },
     draw(ctx, time) {
-      const gradient = ctx.createLinearGradient(0,0,0,520); gradient.addColorStop(0,'#e5efda'); gradient.addColorStop(1,'#f6f7e9'); ctx.fillStyle=gradient;ctx.fillRect(0,0,1000,520);
-      ctx.fillStyle='#fbfcec';ctx.beginPath();ctx.arc(813,91,40,0,Math.PI*2);ctx.fill();
-      for(let i=0;i<10;i++){const bx=i*117-35;const bh=38+(i*29)%72;roundRect(ctx,bx,220-bh,78,bh,4,i%2?'#d9e4c8':'#cdddbb');ctx.fillStyle='#edf2e1';for(let k=0;k<3;k++)for(let j=0;j<2;j++)ctx.fillRect(bx+12+k*19,230-bh+j*22,8,10);}
-      ctx.fillStyle='#bed09b';ctx.beginPath();ctx.moveTo(0,246);ctx.quadraticCurveTo(130,213,310,240);ctx.quadraticCurveTo(650,196,1000,245);ctx.lineTo(1000,290);ctx.lineTo(0,290);ctx.closePath();ctx.fill();
-      ctx.fillStyle='#dce6c4';ctx.fillRect(0,278,1000,100);ctx.fillStyle='#6e8158';ctx.fillRect(0,303,1000,66);
+      nightBackdrop(ctx,1000,520,true);
+      ctx.fillStyle='#bc98ff30';ctx.beginPath();ctx.arc(813,91,40,0,Math.PI*2);ctx.fill();
+      for(let i=0;i<10;i++){const bx=i*117-35;const bh=38+(i*29)%72;roundRect(ctx,bx,220-bh,78,bh,4,i%2?'#23324e':'#172944');ctx.fillStyle='#47eaff80';for(let k=0;k<3;k++)for(let j=0;j<2;j++)ctx.fillRect(bx+12+k*19,230-bh+j*22,8,10);}
+      ctx.fillStyle='#172c43';ctx.beginPath();ctx.moveTo(0,246);ctx.quadraticCurveTo(130,213,310,240);ctx.quadraticCurveTo(650,196,1000,245);ctx.lineTo(1000,290);ctx.lineTo(0,290);ctx.closePath();ctx.fill();
+      ctx.fillStyle='#19364a';ctx.fillRect(0,278,1000,100);ctx.fillStyle='#18263d';ctx.fillRect(0,303,1000,66);
       const mapX=(x:number)=>92+x*6.55;
-      const goalX=mapX(GOAL); ctx.fillStyle='#b4d67c';ctx.fillRect(goalX-90,303,180,66);
-      ctx.strokeStyle='#e7f2c9';ctx.lineWidth=3;ctx.setLineDash([13,10]);ctx.beginPath();ctx.moveTo(0,349);ctx.lineTo(1000,349);ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle='#f5f7e7';ctx.fillRect(goalX-4,309,8,27);
-      label(ctx,'绿色停车区',goalX-57,285,18,'#567738',600);
-      label(ctx,'终点中心 63 m',goalX-61,419,13,'#82936e');
-      for(let i=0;i<=120;i+=10){const x=mapX(i);ctx.strokeStyle='#aaba91';ctx.beginPath();ctx.moveTo(x,371);ctx.lineTo(x,378);ctx.stroke();if(i%20===0)label(ctx,`${i} m`,x-13,400,11,'#93a17e');}
+      const goalX=mapX(GOAL); ctx.fillStyle='#22694f';ctx.fillRect(goalX-90,303,180,66);
+      ctx.strokeStyle='#47eaffb8';ctx.lineWidth=3;ctx.setLineDash([13,10]);ctx.beginPath();ctx.moveTo(0,349);ctx.lineTo(1000,349);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle='#75f1bb';ctx.fillRect(goalX-4,309,8,27);
+      label(ctx,'绿色停车区',goalX-57,285,18,'#75f1bb',600);
+      label(ctx,'终点中心 63 m',goalX-61,419,13,'#a6bad0');
+      for(let i=0;i<=120;i+=10){const x=mapX(i);ctx.strokeStyle='#4b6686';ctx.beginPath();ctx.moveTo(x,371);ctx.lineTo(x,378);ctx.stroke();if(i%20===0)label(ctx,`${i} m`,x-13,400,11,'#a6bad0');}
       const carX=mapX(round.x), vehicle=api.getVehicle(); drawCar(ctx,carX,305,vehicle.color,.77,round.x*.35,vehicle.body);
-      if(brake&&running){ctx.strokeStyle='#eec381';ctx.lineWidth=3;for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(carX-89-i*8,315);ctx.lineTo(carX-75-i*8,318);ctx.stroke();}}
-      if(running&&round.power>1){ctx.strokeStyle='#a6be65';ctx.lineWidth=2;ctx.setLineDash([6,8]);ctx.lineDashOffset=-time*36;ctx.beginPath();ctx.moveTo(carX+20,276);ctx.quadraticCurveTo(carX+54,230,carX+3,227);ctx.stroke();ctx.setLineDash([]);for(let i=0;i<4;i++){const phase=(time*.8+i*.25)%1;ctx.fillStyle='#8faa44';ctx.beginPath();ctx.arc(carX+12+36*Math.sin(phase*Math.PI),270-phase*41,3,0,Math.PI*2);ctx.fill();}roundRect(ctx,carX-27,204,57,23,6,'#f6fae8','#c2d595');label(ctx,`${(round.power/1000).toFixed(1)} kW`,carX-20,220,11,'#7a953f',700);}
-      roundRect(ctx,28,24,208,59,13,'#fffdf6b8','#d1dfbe');label(ctx,'本轮电池',44,46,11,'#889775');label(ctx,modes[mode].name,44,67,17,'#607742',700);label(ctx,`${modes[mode].temp}°C  /  SOC ${modes[mode].soc}%`,117,67,10,'#8c9c7a');
-      label(ctx,'能量账本',34,453,13,'#627a46',700);
-      const remaining=energy(round.speed), values=[round.battery,round.friction,round.losses,remaining];const colors=['#9ab951','#d8aa7b','#bcc6a7','#728b56'];let ex=144;
+      if(brake&&running){ctx.strokeStyle='#f5bc65';ctx.lineWidth=3;for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(carX-89-i*8,315);ctx.lineTo(carX-75-i*8,318);ctx.stroke();}}
+      if(running&&round.power>1){ctx.strokeStyle='#75f1bb';ctx.lineWidth=2;ctx.setLineDash([6,8]);ctx.lineDashOffset=api.reducedMotion()?0:-time*36;ctx.beginPath();ctx.moveTo(carX+20,276);ctx.quadraticCurveTo(carX+54,230,carX+3,227);ctx.stroke();ctx.setLineDash([]);if(!api.reducedMotion())for(let i=0;i<4;i++){const phase=(time*.8+i*.25)%1;ctx.fillStyle='#75f1bb';ctx.beginPath();ctx.arc(carX+12+36*Math.sin(phase*Math.PI),270-phase*41,3,0,Math.PI*2);ctx.fill();}roundRect(ctx,carX-27,204,57,23,6,'#153b3f','#75f1bb');label(ctx,`${(round.power/1000).toFixed(1)} kW`,carX-20,220,11,'#e8f3ff',700);}
+      roundRect(ctx,28,24,208,59,13,'#111c32e8','#3d5b7a');label(ctx,'本轮电池',44,46,11,'#a6bad0');label(ctx,modes[mode].name,44,67,17,'#e8f3ff',700);label(ctx,`${modes[mode].temp}°C  /  SOC ${modes[mode].soc}%`,117,67,10,'#a6bad0');
+      label(ctx,'能量账本',34,453,13,'#e8f3ff',700);
+      const remaining=energy(round.speed), values=[round.battery,round.friction,round.losses,remaining];const colors=['#75f1bb','#f5bc65','#bc98ff','#47eaff'];let ex=144;
       for(let i=0;i<values.length;i++){const w=values[i]/round.initial*558;if(w>.2){roundRect(ctx,ex,436,w,22,0,colors[i]);ex+=w;}}
-      const names=['回到电池','摩擦热','其他损耗','仍在运动'];for(let i=0;i<4;i++){ctx.fillStyle=colors[i];ctx.beginPath();ctx.arc(161+i*140,482,4,0,Math.PI*2);ctx.fill();label(ctx,names[i],173+i*140,486,11,'#879776');}
-      roundRect(ctx,759,431,212,67,12,'#fffdf4b8','#dae3c8');label(ctx,'初始运动能量',777,453,11,'#8b9b79');label(ctx,`${(round.initial/1000).toFixed(1)} kJ`,777,481,22,'#607a42',700);
+      const names=['回到电池','摩擦热','其他损耗','仍在运动'];for(let i=0;i<4;i++){ctx.fillStyle=colors[i];ctx.beginPath();ctx.arc(161+i*140,482,4,0,Math.PI*2);ctx.fill();label(ctx,names[i],173+i*140,486,11,'#a6bad0');}
+      roundRect(ctx,759,431,212,67,12,'#111c32e8','#3d5b7a');label(ctx,'初始运动能量',777,453,11,'#a6bad0');label(ctx,`${(round.initial/1000).toFixed(1)} kJ`,777,481,22,'#e8f3ff',700);
     }
   });
   function start() { round=newRound(mode);running=true;brake=false;accumulator=0;query('[data-result]').hidden=true;query('[data-breakdown]').hidden=true;query('[data-round-status]').textContent='靠近绿色区域时按住刹车，也可以试试辅助停车。';updateUI(); }

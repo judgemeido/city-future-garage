@@ -1,3 +1,4 @@
+import { nightBackdrop } from '../theme';
 import { escapeHTML, label, roundRect } from '../platform';
 import { icon } from '../visuals';
 import type { GameAPI, GameId } from '../types';
@@ -81,11 +82,10 @@ export class LabFX {
   draw(ctx:CanvasRenderingContext2D) {for(const r of this.rings){ctx.save();ctx.globalAlpha=1-r.age/.7;ctx.strokeStyle=r.color;ctx.lineWidth=3;ctx.beginPath();ctx.arc(r.x,r.y,this.reduced()?23:10+r.age*70,0,Math.PI*2);ctx.stroke();ctx.restore();}}
 }
 export function labBackground(ctx:CanvasRenderingContext2D,color:string,title:string) {
-  const g=ctx.createLinearGradient(0,0,1000,500);g.addColorStop(0,'#152936');g.addColorStop(1,'#243e4c');ctx.fillStyle=g;ctx.fillRect(0,0,1000,500);
-  ctx.strokeStyle='#9ececf0c';ctx.lineWidth=1;for(let x=0;x<=1000;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,500);ctx.stroke();}for(let y=0;y<=500;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1000,y);ctx.stroke();}
+  nightBackdrop(ctx,1000,500);
   label(ctx,title,28,36,14,color,600);
 }
 export function glowLine(ctx:CanvasRenderingContext2D,points:{x:number;y:number}[],color:string,width=3) {
   if(points.length<2)return;ctx.save();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';ctx.lineJoin='round';ctx.shadowBlur=12;ctx.shadowColor=color;ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(const p of points.slice(1))ctx.lineTo(p.x,p.y);ctx.stroke();ctx.restore();
 }
-export function badge(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,color:string) {roundRect(ctx,x,y,Math.max(72,text.length*12+20),28,8,'#162c3be6',color);label(ctx,text,x+10,y+19,12,color);}
+export function badge(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,color:string) {roundRect(ctx,x,y,Math.max(72,text.length*12+20),28,8,'#0d172be8',color);label(ctx,text,x+10,y+19,12,color);}

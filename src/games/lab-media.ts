@@ -25,20 +25,20 @@ export function mountLabMedia(host: HTMLElement, id: LabId) {
   };
   function draw(time = performance.now()/1000) {
     ctx.setTransform(density,0,0,density,0,0);
-    ctx.fillStyle = '#112a36'; ctx.fillRect(0,0,width,height);
+    ctx.fillStyle = '#0b1224'; ctx.fillRect(0,0,width,height);
     if (!loaded) return;
     const p = photoRect(), photo = photos[photoIndex];
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(loaded,p.x,p.y,p.w,p.h);
     ctx.save(); ctx.beginPath(); ctx.rect(p.x,p.y,p.w,p.h); ctx.clip();
     const x = p.x + scan*p.w;
-    ctx.fillStyle = '#8ff8e924'; ctx.fillRect(x-7,p.y,14,p.h);
+    ctx.fillStyle = '#47eaff24'; ctx.fillRect(x-7,p.y,14,p.h);
     ctx.strokeStyle = '#a7fff0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x,p.y); ctx.lineTo(x,p.y+p.h); ctx.stroke();
     photo.points.forEach((item,i)=>{
       const px=p.x+item.x*p.w, py=p.y+item.y*p.h;
-      ctx.strokeStyle = i===point?'#ffdb87':'#b7fff1'; ctx.fillStyle='#133442df'; ctx.lineWidth=i===point?3:1.5;
+      ctx.strokeStyle = i===point?'#ffdb87':'#9af3ff'; ctx.fillStyle='#111c32df'; ctx.lineWidth=i===point?3:1.5;
       ctx.beginPath();ctx.arc(px,py,i===point?12:9,0,Math.PI*2);ctx.fill();ctx.stroke();
-      label(ctx,String(i+1),px-3.5,py+4,11,i===point?'#ffdb87':'#b7fff1',700);
+      label(ctx,String(i+1),px-3.5,py+4,11,i===point?'#ffdb87':'#9af3ff',700);
     });
     // This path follows the photographed cable; its light indicates model power.
     if (photo.flow && (signal.activity||0)>0) {
@@ -52,7 +52,7 @@ export function mountLabMedia(host: HTMLElement, id: LabId) {
       }
     }
     ctx.restore();
-    roundRect(ctx,p.x+6,p.y+6,94,21,6,'#133442e8');label(ctx,'实物照片 · 教学叠层',p.x+12,p.y+20,9,'#e5f5e9');
+    roundRect(ctx,p.x+6,p.y+6,94,21,6,'#111c32e8');label(ctx,'实物照片 · 教学叠层',p.x+12,p.y+20,9,'#e5f5e9');
   }
   function resize() {
     const b=surface.getBoundingClientRect();width=Math.max(1,b.width);height=Math.max(1,b.height);density=Math.min(2,devicePixelRatio||1);
@@ -137,14 +137,14 @@ export function mountLabMedia(host: HTMLElement, id: LabId) {
     capture(fallback:string) {
       const model=host.querySelector<HTMLCanvasElement>('.lab-stage canvas');if(!model)return fallback;
       const output=document.createElement('canvas');output.width=1200;output.height=560;const c=output.getContext('2d')!;
-      c.fillStyle='#17313e';c.fillRect(0,0,1200,560);c.imageSmoothingQuality='high';
-      label(c,'我的操作记录 · 教学模型',22,36,18,'#d6f5e7',600);label(c,photos[photoIndex].name+' · 实物观察',758,36,16,'#d6f5e7',600);
+      c.fillStyle='#0f1b30';c.fillRect(0,0,1200,560);c.imageSmoothingQuality='high';
+      label(c,'我的操作记录 · 教学模型',22,36,18,'#e8f3ff',600);label(c,photos[photoIndex].name+' · 实物观察',758,36,16,'#e8f3ff',600);
       c.drawImage(model,20,62,720,360);
-      if(loaded){const p=photoRect(),scale=Math.min(424/p.w,360/p.h),w=p.w*scale,h=p.h*scale;c.drawImage(canvas,p.x*density,p.y*density,p.w*density,p.h*density,756+(424-w)/2,62+(360-h)/2,w,h);}else label(c,'实物照片未加载，本次只保存教学模型',763,245,14,'#d6f5e7');
+      if(loaded){const p=photoRect(),scale=Math.min(424/p.w,360/p.h),w=p.w*scale,h=p.h*scale;c.drawImage(canvas,p.x*density,p.y*density,p.w*density,p.h*density,756+(424-w)/2,62+(360-h)/2,w,h);}else label(c,'实物照片未加载，本次只保存教学模型',763,245,14,'#e8f3ff');
       const s=source();
-      label(c,`观察点：${photos[photoIndex].points[point].name} · 摄影 ${s.author} / ${s.license}`,22,455,14,'#d6e8db');
-      label(c,'照片展示实物；人工标注、光流、读数、条件和轨迹均为教学示意。',22,481,13,'#b2c9c1');
-      c.font='11px "Microsoft YaHei",sans-serif';c.fillStyle='#9cbab3';
+      label(c,`观察点：${photos[photoIndex].points[point].name} · 摄影 ${s.author} / ${s.license}`,22,455,14,'#d3e5f8');
+      label(c,'照片展示实物；人工标注、光流、读数、条件和轨迹均为教学示意。',22,481,13,'#aebfd3');
+      c.font='11px "Microsoft YaHei",sans-serif';c.fillStyle='#9eb4cd';
       const url=s.source;
       for(let start=0,line=0;start<url.length;line++){
         let end=start+1;while(end<url.length&&c.measureText(url.slice(start,end+1)).width<1150)end++;

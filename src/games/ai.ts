@@ -1,3 +1,4 @@
+import { nightBackdrop } from '../theme';
 import { createStage, roundRect, label, drawCar, escapeHTML } from '../platform';
 import { drawPremiumTopCar } from '../car-art';
 import type { GameAPI, MountedGame } from '../types';
@@ -226,18 +227,18 @@ export function mountAI(host:HTMLElement,api:GameAPI):MountedGame {
   $('#ai-snapshot').addEventListener('click',()=>{api.saveImage('ai',stage.capture());api.notify('小司机实验快照已存入电子报告');});
   function drawDriver(ctx:CanvasRenderingContext2D,x:number,y:number,size=1) {
     ctx.save();ctx.translate(x,y);ctx.scale(size,size);
-    ctx.fillStyle='#c9dcc7';ctx.beginPath();ctx.arc(0,0,36,0,Math.PI*2);ctx.fill();
-    roundRect(ctx,-23,-24,46,48,14,'#fbf7e7','#597457');
-    roundRect(ctx,-18,-14,36,27,9,'#def0dc');ctx.fillStyle='#315347';ctx.beginPath();ctx.arc(-8,-1,3,0,Math.PI*2);ctx.arc(8,-1,3,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle='#315347';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,4,7,.1,Math.PI-.1);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(0,-24);ctx.lineTo(0,-33);ctx.stroke();ctx.fillStyle='#e8be66';ctx.beginPath();ctx.arc(0,-35,5,0,Math.PI*2);ctx.fill();
-    roundRect(ctx,-7,18,14,4,2,'#7d9b70');ctx.restore();
+    ctx.fillStyle='#bc98ff22';ctx.beginPath();ctx.arc(0,0,36,0,Math.PI*2);ctx.fill();
+    roundRect(ctx,-23,-24,46,48,14,'#1e2d46','#bc98ff');
+    roundRect(ctx,-18,-14,36,27,9,'#081b30');ctx.fillStyle='#47eaff';ctx.beginPath();ctx.arc(-8,-1,3,0,Math.PI*2);ctx.arc(8,-1,3,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#47eaff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,4,7,.1,Math.PI-.1);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,-24);ctx.lineTo(0,-33);ctx.stroke();ctx.fillStyle='#ed71bd';ctx.beginPath();ctx.arc(0,-35,5,0,Math.PI*2);ctx.fill();
+    roundRect(ctx,-7,18,14,4,2,'#bc98ff');ctx.restore();
   }
   function drawTopCar(ctx:CanvasRenderingContext2D,x:number,y:number,color:string,moving:boolean,time:number) {
     ctx.save();ctx.translate(x,y);
     drawPremiumTopCar(ctx,0,0,color,1,api.getVehicle().body);
     drawDriver(ctx,3,0,.42);
-    if(moving){ctx.strokeStyle='#bdd2b9';ctx.lineWidth=3;for(let i=0;i<3;i++){const offset=(time*70+i*22)%60;ctx.beginPath();ctx.moveTo(-70-offset,-12+i*12);ctx.lineTo(-57-offset,-12+i*12);ctx.stroke();}}
+    if(moving&&!api.reducedMotion()){ctx.strokeStyle='#47eaff66';ctx.lineWidth=3;for(let i=0;i<3;i++){const offset=(time*70+i*22)%60;ctx.beginPath();ctx.moveTo(-70-offset,-12+i*12);ctx.lineTo(-57-offset,-12+i*12);ctx.stroke();}}
     ctx.restore();
   }
   function treeCountText() {return tree?`${modelSamples.length} 条示范 · 第 ${modelRevision} 版模型`:'从你的示范开始学习';}
@@ -245,39 +246,39 @@ export function mountAI(host:HTMLElement,api:GameAPI):MountedGame {
     canvasTime=time;
     const e=live?TESTS[(live.district==='a'?0:4)+live.index]:selectedExample(),f=e.features;
     const vehicle=api.getVehicle();
-    ctx.fillStyle='#e8f0e2';ctx.fillRect(0,0,1000,520);
-    roundRect(ctx,22,20,956,62,18,'#fffcf0');drawDriver(ctx,58,50,.68);
-    label(ctx,'小司机 · 芽芽',93,45,18,'#345345',700);label(ctx,treeCountText(),93,65,12,'#72836e');
+    nightBackdrop(ctx,1000,520,true);
+    roundRect(ctx,22,20,956,62,18,'#111c32');drawDriver(ctx,58,50,.68);
+    label(ctx,'小司机 · 芽芽',93,45,18,'#e8f3ff',700);label(ctx,treeCountText(),93,65,12,'#a6bad0');
     const statusText=live?`街区 ${live.district.toUpperCase()}  /  ${live.index+1} · ${e.title}`:'示范工位  /  '+e.title;
-    label(ctx,statusText,410,48,17,'#3f5c49',700);
-    if(live?.paused) {roundRect(ctx,842,32,112,34,14,'#f0e8cd');label(ctx,'试跑已暂停',854,54,13,'#927549');}
-    else {roundRect(ctx,862,32,88,34,14,'#e6efd9');label(ctx,live?'正在检验':'等待示范',878,54,13,'#58805a');}
-    // A calm, illustrated neighborhood. All moving information stays on the road.
-    ctx.fillStyle='#d1dfc5';ctx.fillRect(0,164,1000,27);ctx.fillRect(0,349,1000,28);
-    ctx.fillStyle='#858f8a';ctx.fillRect(0,191,1000,158);
-    ctx.fillStyle='#919c95';ctx.fillRect(0,197,1000,6);ctx.fillRect(0,337,1000,6);
-    ctx.strokeStyle='#e9e7d9';ctx.lineWidth=3;ctx.setLineDash([26,22]);ctx.beginPath();ctx.moveTo(0,270);ctx.lineTo(1000,270);ctx.stroke();ctx.setLineDash([]);
-    for(let x=0;x<1000;x+=75){roundRect(ctx,x,173,45,4,2,'#e9efdf');roundRect(ctx,x,360,45,4,2,'#e9efdf');}
+    label(ctx,statusText,410,48,17,'#e8f3ff',700);
+    if(live?.paused) {roundRect(ctx,842,32,112,34,14,'#48334a');label(ctx,'试跑已暂停',854,54,13,'#f5bc65');}
+    else {roundRect(ctx,862,32,88,34,14,'#163d40');label(ctx,live?'正在检验':'等待示范',878,54,13,'#a6bad0');}
+    // Night city landmarks keep the road and model decisions readable.
+    ctx.fillStyle='#173344';ctx.fillRect(0,164,1000,27);ctx.fillRect(0,349,1000,28);
+    ctx.fillStyle='#18263d';ctx.fillRect(0,191,1000,158);
+    ctx.fillStyle='#263e58';ctx.fillRect(0,197,1000,6);ctx.fillRect(0,337,1000,6);
+    ctx.strokeStyle='#47eaffb8';ctx.lineWidth=3;ctx.setLineDash([26,22]);ctx.beginPath();ctx.moveTo(0,270);ctx.lineTo(1000,270);ctx.stroke();ctx.setLineDash([]);
+    for(let x=0;x<1000;x+=75){roundRect(ctx,x,173,45,4,2,'#ed71bd90');roundRect(ctx,x,360,45,4,2,'#ed71bd90');}
     // Crosswalk and stop line are actual landmarks for the animated decision.
-    for(let y=210;y<334;y+=21) roundRect(ctx,616,y,62,12,2,'#f3f0df');
-    ctx.fillStyle='#eeeadd';ctx.fillRect(568,207,5,55);
-    const buildingColor=f.road==='school'?'#edd3a0':'#c7d9c1';
-    roundRect(ctx,689,93,196,62,8,buildingColor);roundRect(ctx,679,84,216,20,6,f.road==='school'?'#b58d68':'#88ab85');
-    for(let i=0;i<4;i++) roundRect(ctx,706+i*41,111,25,27,3,'#fff7df');
-    roundRect(ctx,772,117,28,38,3,'#879e85');label(ctx,f.road==='school'?'新 芽 学 校':'薄 荷 公 园',716,101,13,'#506443',700);
+    for(let y=210;y<334;y+=21) roundRect(ctx,616,y,62,12,2,'#b8d7e5');
+    ctx.fillStyle='#d6f4ff';ctx.fillRect(568,207,5,55);
+    const buildingColor=f.road==='school'?'#2b2c4b':'#173c47';
+    roundRect(ctx,689,93,196,62,8,buildingColor);roundRect(ctx,679,84,216,20,6,f.road==='school'?'#bc98ff':'#75f1bb');
+    for(let i=0;i<4;i++) roundRect(ctx,706+i*41,111,25,27,3,'#47eaff80');
+    roundRect(ctx,772,117,28,38,3,'#24445a');label(ctx,f.road==='school'?'新 芽 学 校':'薄 荷 公 园',716,101,13,'#e8f3ff',700);
     for(const [x,y,s] of [[120,126,1],[228,136,.8],[930,133,.9],[70,408,.8],[879,420,1.2],[936,407,.7]]) {
-      ctx.fillStyle='#859967';ctx.fillRect(x-3,y,6,27*s);ctx.fillStyle='#a6c193';ctx.beginPath();ctx.arc(x,y-7,22*s,0,Math.PI*2);ctx.fill();ctx.fillStyle='#bad09f';ctx.beginPath();ctx.arc(x-10*s,y-14,14*s,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#456078';ctx.fillRect(x-3,y,6,27*s);ctx.fillStyle='#224755';ctx.beginPath();ctx.arc(x,y-7,22*s,0,Math.PI*2);ctx.fill();ctx.fillStyle='#2b5a60';ctx.beginPath();ctx.arc(x-10*s,y-14,14*s,0,Math.PI*2);ctx.fill();
     }
     // Signal is presented as a structured feature, not inferred from a picture.
-    ctx.strokeStyle='#65786a';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(592,125);ctx.lineTo(592,187);ctx.stroke();
-    roundRect(ctx,576,106,33,70,10,'#40574a');
-    for(const [y,colour,active] of [[124,'#e49078',f.signal==='red'],[158,'#a5d092',f.signal==='green']] as const) {ctx.fillStyle=active?colour:'#647768';ctx.beginPath();ctx.arc(592,y,9,0,Math.PI*2);ctx.fill();}
+    ctx.strokeStyle='#5a7797';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(592,125);ctx.lineTo(592,187);ctx.stroke();
+    roundRect(ctx,576,106,33,70,10,'#0c172a');
+    for(const [y,colour,active] of [[124,'#ff6e91',f.signal==='red'],[158,'#75f1bb',f.signal==='green']] as const) {ctx.fillStyle=active?colour:'#32435e';ctx.beginPath();ctx.arc(592,y,9,0,Math.PI*2);ctx.fill();}
     // A second car creates context but never changes the structured model input.
     drawTopCar(ctx,848,307,'#e8c781',false,time);
     if(f.visibility==='limited') {
-      ctx.fillStyle='rgba(239,245,232,.48)';ctx.fillRect(0,84,1000,289);
-      for(let i=0;i<4;i++){ctx.fillStyle='rgba(255,253,242,.16)';ctx.beginPath();ctx.ellipse(180+i*260+Math.sin(time*.3+i)*20,175+i%2*98,230,48,0,0,Math.PI*2);ctx.fill();}
-      roundRect(ctx,322,118,155,32,12,'#f5f3e7');label(ctx,'已知线索：视线受限',336,139,12,'#7d826b');
+      ctx.fillStyle='rgba(149,181,216,.30)';ctx.fillRect(0,84,1000,289);
+      for(let i=0;i<4;i++){ctx.fillStyle='rgba(172,204,232,.14)';ctx.beginPath();ctx.ellipse(180+i*260+(api.reducedMotion()?0:Math.sin(time*.3+i)*20),175+i%2*98,230,48,0,0,Math.PI*2);ctx.fill();}
+      roundRect(ctx,322,118,155,32,12,'#20314b');label(ctx,'已知线索：视线受限',336,139,12,'#a6bad0');
     }
     let carX=155,moving=false;
     if(live) {
@@ -288,22 +289,22 @@ export function mountAI(host:HTMLElement,api:GameAPI):MountedGame {
     }
     if(f.pedestrian==='crossing') {
       const progress=live?Math.min(1,live.elapsed/4.4):.42,pedY=165+progress*210,pedX=641;
-      ctx.fillStyle='#4d6654';ctx.beginPath();ctx.arc(pedX,pedY-13,8,0,Math.PI*2);ctx.fill();roundRect(ctx,pedX-9,pedY-5,18,24,6,'#e59b73');
-      ctx.strokeStyle='#3c5648';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(pedX-4,pedY+17);ctx.lineTo(pedX-6-Math.sin(time*7)*3,pedY+28);ctx.moveTo(pedX+4,pedY+17);ctx.lineTo(pedX+6+Math.sin(time*7)*3,pedY+28);ctx.stroke();
+      ctx.fillStyle='#b9d5e1';ctx.beginPath();ctx.arc(pedX,pedY-13,8,0,Math.PI*2);ctx.fill();roundRect(ctx,pedX-9,pedY-5,18,24,6,'#ed71bd');
+      ctx.strokeStyle='#bc98ff';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(pedX-4,pedY+17);ctx.lineTo(pedX-6-(api.reducedMotion()?0:Math.sin(time*7)*3),pedY+28);ctx.moveTo(pedX+4,pedY+17);ctx.lineTo(pedX+6+Math.sin(time*7)*3,pedY+28);ctx.stroke();
     }
     drawTopCar(ctx,carX,235,vehicle.color,moving,time);
     const activeAction=live?.prediction.action??samples.find(s=>s.id===selectedId)?.action;
-    roundRect(ctx,Math.max(85,Math.min(carX-65,835)),147,130,34,12,'#fffcf0','#d8e2ce');
-    label(ctx,live?`模型：${ACTION_TEXT[live.prediction.action]}`:activeAction?`你示范：${ACTION_TEXT[activeAction]}`:'我该怎么做？',Math.max(95,Math.min(carX-51,849)),169,14,'#3e664b',700);
-    if(live?.result.intercepted&&live.elapsed>.7) {roundRect(ctx,315,302,240,32,12,'#ffebcf');label(ctx,`安全教练接管 → ${ACTION_TEXT[live.result.actualAction]}`,332,324,14,'#9b7045',700);}
+    roundRect(ctx,Math.max(85,Math.min(carX-65,835)),147,130,34,12,'#111c32','#456385');
+    label(ctx,live?`模型：${ACTION_TEXT[live.prediction.action]}`:activeAction?`你示范：${ACTION_TEXT[activeAction]}`:'我该怎么做？',Math.max(95,Math.min(carX-51,849)),169,14,'#e8f3ff',700);
+    if(live?.result.intercepted&&live.elapsed>.7) {roundRect(ctx,315,302,240,32,12,'#493540');label(ctx,`安全教练接管 → ${ACTION_TEXT[live.result.actualAction]}`,332,324,14,'#f5bc65',700);}
     // Bottom note is a compact visible record of the model's real reasoning.
-    roundRect(ctx,26,389,948,109,18,'#fffcf0');drawCar(ctx,91,451,vehicle.color,.53,time*(moving?4:0),vehicle.body);
-    label(ctx,live?'这一次，它先看了什么？':'输入给模型的四条线索',167,419,16,'#405f4b',700);
+    roundRect(ctx,26,389,948,109,18,'#111c32');drawCar(ctx,91,451,vehicle.color,.53,time*(moving?4:0),vehicle.body);
+    label(ctx,live?'这一次，它先看了什么？':'输入给模型的四条线索',167,419,16,'#e8f3ff',700);
     const featureLabels=[VALUE_NAMES[f.signal],f.pedestrian==='crossing'?'行人横穿':'没有横穿行人',f.road==='school'?'校园路段':'普通路段',f.visibility==='limited'?'视线受限':'视线清晰'];
-    featureLabels.forEach((text,i)=>{const x=166+i*137;roundRect(ctx,x,431,126,30,9,'#eef3e7');label(ctx,text,x+9,451,12,'#627b60');});
+    featureLabels.forEach((text,i)=>{const x=166+i*137;roundRect(ctx,x,431,126,30,9,'#1b2b44');label(ctx,text,x+9,451,12,'#a6bad0');});
     const insight=live?live.prediction.path.slice(0,3).join(' → '):'先选择动作记录示范。模型生成后，会按示范中的信息差异建立决策树。';
-    label(ctx,insight.length>71?insight.slice(0,70)+'…':insight,167,483,12,'#71856a');
-    if(time<driverMessageUntil) {roundRect(ctx,94,88,370,39,12,'#fff7db');label(ctx,'我会学你的示范，也需要新情境帮我发现盲区。',106,113,13,'#8e7948');}
+    label(ctx,insight.length>71?insight.slice(0,70)+'…':insight,167,483,12,'#a6bad0');
+    if(time<driverMessageUntil) {roundRect(ctx,94,88,370,39,12,'#453648');label(ctx,'我会学你的示范，也需要新情境帮我发现盲区。',106,113,13,'#f5bc65');}
   }
   const stage=createStage($('#ai-stage'),{label:'小司机道路训练与决策树检验场景',width:1000,height:520,draw:drawWorld,
     update(dt){if(disposed||!live||live.paused) return;live.elapsed+=dt*runSpeed;const progress=Math.min(4,live.index+live.elapsed/5.1);$('#ai-progress-fill').style.width=`${progress/4*100}%`;$('.ai-progress-track').setAttribute('aria-valuenow',String(Math.min(4,Math.floor(progress))));if(live.elapsed>=5.1) finishEvent();},

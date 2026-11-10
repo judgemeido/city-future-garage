@@ -1,3 +1,4 @@
+import { nightBackdrop } from '../theme';
 import type { GameAPI, MountedGame, Vehicle } from '../types';
 import { createStage, roundRect, label, downloadFile, escapeHTML } from '../platform';
 import { drawPremiumCar, premiumCarSVG } from '../car-art';
@@ -187,7 +188,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
   let snap: { part: Part; remaining: number } | null = null;
   let destroyed = false, elapsed = 0;
   let stage: ReturnType<typeof createStage>;
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduceMotion = () => api.reducedMotion();
   let message = runs.length ? '车和试跑记录都在。新任务有三次路况挑战，试着拿到三颗星！' : '选一辆喜欢的车，带它接任务！途中遇到路况时，由你来决定怎么做。';
   let comparison: { previous: SavedRun; current: SavedRun } | null = null;
 
@@ -346,7 +347,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     dragging = null; comparison = null;
     const road = ROADS.find(r => r.id === routeId)!;
     const challenge = createChallenge(routeId, attempts[routeId]++);
-    playback = { outcome: simulateRoad(vehicle, road), elapsed: 0, displaySeconds: reduceMotion ? 8 : road.seconds, paused: false, finished: false, challenge, eventPhase: null };
+    playback = { outcome: simulateRoad(vehicle, road), elapsed: 0, displaySeconds: reduceMotion() ? 8 : road.seconds, paused: false, finished: false, challenge, eventPhase: null };
     get('.factory-result').hidden = true;
     feedback(`${road.title}出发！途中有三次选择，答错可以重试；跑完全程且三次首选正确就能拿到三星。`);
     persist();
@@ -406,30 +407,29 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     const canvas = document.createElement('canvas'); canvas.width = 2000; canvas.height = 2400;
     const ctx = canvas.getContext('2d')!;
     ctx.scale(2, 2);
-    const bg = ctx.createLinearGradient(0, 0, 1000, 1200); bg.addColorStop(0, '#eef6ee'); bg.addColorStop(1, '#fff6e7');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, 1000, 1200);
-    label(ctx, 'MY FIRST ELECTRIC CAR', 78, 104, 20, '#648675', 600);
-    label(ctx, vehicle.name, 78, 184, 50, '#244839', 700);
-    label(ctx, `${api.getProfile().nickname || '小工程师'}的新能源造车作品`, 80, 227, 24, '#5f796a');
-    roundRect(ctx, 70, 294, 860, 394, 32, '#fffdf5', '#d3e2d3');
-    ctx.fillStyle = '#dbead7'; ctx.beginPath(); ctx.ellipse(500, 674, 275, 15, 0, 0, Math.PI * 2); ctx.fill();
+    nightBackdrop(ctx, 1000, 1200);
+    label(ctx, 'MY FIRST ELECTRIC CAR', 78, 104, 20, '#a6bad0', 600);
+    label(ctx, vehicle.name, 78, 184, 50, '#e8f3ff', 700);
+    label(ctx, `${api.getProfile().nickname || '小工程师'}的新能源造车作品`, 80, 227, 24, '#a6bad0');
+    roundRect(ctx, 70, 294, 860, 394, 32, '#111c32', '#3e5476');
+    ctx.fillStyle = '#47eaff22'; ctx.beginPath(); ctx.ellipse(500, 674, 275, 15, 0, 0, Math.PI * 2); ctx.fill();
     drawBody(ctx, 500, 590, vehicle, 2.5);
     const battery = batteryOf(vehicle), motor = motorOf(vehicle);
-    label(ctx, `${bodyOf(vehicle).title} · ${configurationCost(vehicle)} 工程币`, 111, 342, 20, '#496e58');
+    label(ctx, `${bodyOf(vehicle).title} · ${configurationCost(vehicle)} 工程币`, 111, 342, 20, '#e8f3ff');
     for (const [i, pair] of [['电池容量', `${battery.value} kWh`], ['最大供电', `${battery.power} kW`], ['电机输出', `${motor.value} kW`]].entries()) {
       const x = 85 + i * 305;
-      label(ctx, pair[0], x, 771, 21, '#6b8072'); label(ctx, pair[1], x, 823, 38, '#244839', 700);
+      label(ctx, pair[0], x, 771, 21, '#a6bad0'); label(ctx, pair[1], x, 823, 38, '#e8f3ff', 700);
     }
-    label(ctx, '电池 → 逆变器 → 电机 → 减速器 → 车轮', 85, 933, 25, '#42604f');
+    label(ctx, '电池 → 逆变器 → 电机 → 减速器 → 车轮', 85, 933, 25, '#e8f3ff');
     const matchingRuns = runs.filter(run => run.fingerprint === fingerprint(vehicle));
     const routeMarks = ROADS.map(road => {
       const routeRuns = matchingRuns.filter(run => run.route === road.id);
       return `${road.id === 'city' ? '校园' : road.id === 'hill' ? '爬坡' : '远方'} ${routeRuns.length ? `${round(Math.max(...routeRuns.map(run => run.ratio)) * 100)}%` : '未试跑'}`;
     });
-    label(ctx, '这套配置的路测记录', 85, 978, 20, '#6b8072');
-    label(ctx, routeMarks.join('    '), 85, 1021, 23, '#42604f');
-    label(ctx, '我装配，我试跑，我发现。', 85, 1083, 28, '#dc866b', 600);
-    label(ctx, '合成教学参数与加速展示，不代表实车性能。', 85, 1147, 18, '#7b8c7d');
+    label(ctx, '这套配置的路测记录', 85, 978, 20, '#a6bad0');
+    label(ctx, routeMarks.join('    '), 85, 1021, 23, '#e8f3ff');
+    label(ctx, '我装配，我试跑，我发现。', 85, 1083, 28, '#f5bc65', 600);
+    label(ctx, '合成教学参数与加速展示，不代表实车性能。', 85, 1147, 18, '#a6bad0');
     return canvas.toDataURL('image/png');
   }
 
@@ -485,53 +485,53 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
   function drawChain(ctx: CanvasRenderingContext2D, y: number, running: boolean) {
     const names = ['电池', '逆变器', '电机', '减速器', '车轮'];
     const xs = [280, 390, 500, 610, 720];
-    ctx.strokeStyle = '#b8cbb8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(xs[4], y); ctx.stroke();
+    ctx.strokeStyle = '#406381'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(xs[4], y); ctx.stroke();
     xs.forEach((x, i) => {
-      roundRect(ctx, x - 40, y - 17, 80, 34, 17, i === 0 ? '#d0ead8' : i === 2 ? '#d9e5f7' : '#edf1e5', '#bccdbd');
-      label(ctx, names[i], x - (names[i].length * 7), y + 5, 14, '#446554');
+      roundRect(ctx, x - 40, y - 17, 80, 34, 17, i === 0 ? '#174643' : i === 2 ? '#253456' : '#18263e', '#476786');
+      label(ctx, names[i], x - (names[i].length * 7), y + 5, 14, '#e8f3ff');
     });
-    const dotX = xs[0] + (reduceMotion ? .45 : (elapsed * (running ? .5 : .2)) % 1) * (xs[4] - xs[0]);
-    ctx.beginPath(); ctx.arc(dotX, y + 22, 4, 0, Math.PI * 2); ctx.fillStyle = '#dfa165'; ctx.fill();
+    const dotX = xs[0] + (reduceMotion() ? .45 : running ? (elapsed * .5) % 1 : 0) * (xs[4] - xs[0]);
+    ctx.beginPath(); ctx.arc(dotX, y + 22, 4, 0, Math.PI * 2); ctx.fillStyle = '#f5bc65'; ctx.fill();
   }
 
   function drawWorkshop(ctx: CanvasRenderingContext2D) {
-    const bg = ctx.createLinearGradient(0, 0, 0, 520); bg.addColorStop(0, '#f4f6e9'); bg.addColorStop(.67, '#eef0df'); bg.addColorStop(1, '#dae4d4');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, 1000, 520);
+    nightBackdrop(ctx);
     // Architectural windows and a little assembly robot keep the scene a workshop.
     for (let i = 0; i < 6; i++) {
-      roundRect(ctx, 72 + i * 158, 159, 132, 94, 9, '#e0ece2', '#c8d8cb');
-      ctx.strokeStyle = '#c8d8cb'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(138 + i * 158, 160); ctx.lineTo(138 + i * 158, 251); ctx.stroke();
+      roundRect(ctx, 72 + i * 158, 159, 132, 94, 9, '#132b43', '#426485');
+      ctx.strokeStyle = '#426485'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(138 + i * 158, 160); ctx.lineTo(138 + i * 158, 251); ctx.stroke();
     }
-    ctx.fillStyle = '#cfdccc'; ctx.fillRect(0, 363, 1000, 3);
-    ctx.strokeStyle = '#c9d8c4'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#47eaff70'; ctx.fillRect(0, 363, 1000, 3);
+    ctx.strokeStyle = '#365071'; ctx.lineWidth = 1;
     for (let x = -100; x < 1100; x += 120) { ctx.beginPath(); ctx.moveTo(500 + (x - 500) * .4, 365); ctx.lineTo(x, 520); ctx.stroke(); }
-    label(ctx, 'NEW ENERGY WORKSHOP', 43, 43, 13, '#7f947e', 600);
-    label(ctx, '让你的想法，开上路。', 43, 79, 27, '#2e4f3c', 600);
-    roundRect(ctx, 792, 88, 163, 50, 14, '#fffdf4', '#d7e0cc');
-    label(ctx, '我的配置', 808, 108, 12, '#778a76'); label(ctx, `${configurationCost(vehicle)} 工程币`, 808, 128, 18, '#49654c', 600);
+    label(ctx, 'NEW ENERGY WORKSHOP', 43, 43, 13, '#a6bad0', 600);
+    label(ctx, '让你的想法，开上路。', 43, 79, 27, '#e8f3ff', 600);
+    roundRect(ctx, 792, 88, 163, 50, 14, '#111c32', '#3e5476');
+    label(ctx, '我的配置', 808, 108, 12, '#a6bad0'); label(ctx, `${configurationCost(vehicle)} 工程币`, 808, 128, 18, '#e8f3ff', 600);
     drawChain(ctx, 103, false);
     // Assembly station and hanging robotic tools.
-    ctx.strokeStyle = '#b4c9b5'; ctx.lineWidth = 12; ctx.lineCap = 'round';
+    ctx.strokeStyle = '#517596'; ctx.lineWidth = 12; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(186, 184); ctx.lineTo(221, 227); ctx.lineTo(195, 275); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(835, 184); ctx.lineTo(797, 227); ctx.lineTo(817, 275); ctx.stroke();
-    for (const [x, y] of [[186, 184], [221, 227], [835, 184], [797, 227]]) { ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fillStyle = '#789d83'; ctx.fill(); }
+    for (const [x, y] of [[186, 184], [221, 227], [835, 184], [797, 227]]) { ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fillStyle = '#47eaff'; ctx.fill(); }
     ctx.lineWidth = 1;
-    roundRect(ctx, 214, 387, 597, 18, 8, '#d3dfcc', '#b4cbb6');
+    roundRect(ctx, 214, 387, 597, 18, 8, '#19364a', '#47eaff80');
+    ctx.save(); ctx.strokeStyle = '#47eaff'; ctx.shadowColor = '#47eaff'; ctx.shadowBlur = 12; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(503, 399, 296, 15, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     drawBody(ctx, 503, 310, vehicle, 2.45);
-    roundRect(ctx, 43, 149, 191, 31, 12, '#fffdf4', '#cad8c4');
-    label(ctx, vehicle.name.length > 11 ? `${vehicle.name.slice(0, 11)}…` : vehicle.name || '我的小电车', 58, 170, 15, '#4b6d56', 600);
+    roundRect(ctx, 43, 149, 191, 31, 12, '#111c32', '#3d5b7a');
+    label(ctx, vehicle.name.length > 11 ? `${vehicle.name.slice(0, 11)}…` : vehicle.name || '我的小电车', 58, 170, 15, '#e8f3ff', 600);
     if (cutaway) {
       // The low, flat pack is under the passenger cabin; the motor drives the axle.
-      roundRect(ctx, 420, 317, 170, 24, 5, '#b4e6c1e8', '#527d6a');
-      for (let i = 0; i < 12; i++) roundRect(ctx, 426 + i * 13, 322, 10, 14, 1.5, '#d8f4dd', '#75a78a');
+      roundRect(ctx, 420, 317, 170, 24, 5, '#174643e8', '#75f1bb');
+      for (let i = 0; i < 12; i++) roundRect(ctx, 426 + i * 13, 322, 10, 14, 1.5, '#75f1bb', '#309882');
       motorIcon(ctx, 652, 324, .42);
-      ctx.strokeStyle = '#6f9681'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(505, 343); ctx.lineTo(505, 370); ctx.stroke();
-      roundRect(ctx, 414, 366, 185, 23, 8, '#fffdf6', '#bdd2bf');
-      label(ctx, `底盘电池 · ${batteryOf(vehicle).value} kWh`, 430, 382, 12, '#567661', 600);
+      ctx.strokeStyle = '#47eaff'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(505, 343); ctx.lineTo(505, 370); ctx.stroke();
+      roundRect(ctx, 414, 366, 185, 23, 8, '#111c32', '#47eaff80');
+      label(ctx, `底盘电池 · ${batteryOf(vehicle).value} kWh`, 430, 382, 12, '#e8f3ff', 600);
       ctx.beginPath(); ctx.moveTo(672, 324); ctx.lineTo(748, 324); ctx.lineTo(779, 308); ctx.stroke();
-      roundRect(ctx, 779, 289, 158, 43, 11, '#fffdf6', '#bdd2bf');
-      label(ctx, '前轴驱动电机', 792, 307, 12, '#678198');
-      label(ctx, `${motorOf(vehicle).value} kW`, 792, 324, 14, '#486d8e', 600);
+      roundRect(ctx, 779, 289, 158, 43, 11, '#111c32', '#47eaff80');
+      label(ctx, '前轴驱动电机', 792, 307, 12, '#a6bad0');
+      label(ctx, `${motorOf(vehicle).value} kW`, 792, 324, 14, '#e8f3ff', 600);
     }
     // Three actual draggable crates. The menu is the keyboard/click alternative.
     const trays: { part: Part; x: number; title: string }[] = [
@@ -539,18 +539,18 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     ];
     trays.forEach(({ part, x, title }) => {
       const active = chosenPart === part;
-      roundRect(ctx, x - 110, 414, 220, 81, 16, active ? '#fffdf3' : '#edf2e8', active ? '#8bb798' : '#c7d4c2');
+      roundRect(ctx, x - 110, 414, 220, 81, 16, active ? '#20364c' : '#111c32', active ? '#47eaff' : '#3d5b7a');
       if (part === 'battery') batteryIcon(ctx, x - 47, 453, '#8bc89b', .65);
       else if (part === 'motor') motorIcon(ctx, x - 47, 453, .63);
       else drawBody(ctx, x - 51, 454, vehicle, .57);
-      label(ctx, title, x + 5, 446, 16, '#46624d', 600);
-      label(ctx, part === 'battery' ? `${batteryOf(vehicle).value} kWh · ${batteryOf(vehicle).power} kW` : part === 'motor' ? `${motorOf(vehicle).value} kW 电机` : bodyOf(vehicle).title, x + 5, 466, 11, '#587561');
-      label(ctx, '拖上车 / 点击', x + 5, 483, 10, '#80917b');
+      label(ctx, title, x + 5, 446, 16, '#e8f3ff', 600);
+      label(ctx, part === 'battery' ? `${batteryOf(vehicle).value} kWh · ${batteryOf(vehicle).power} kW` : part === 'motor' ? `${motorOf(vehicle).value} kW 电机` : bodyOf(vehicle).title, x + 5, 466, 11, '#e8f3ff');
+      label(ctx, '拖上车 / 点击', x + 5, 483, 10, '#a6bad0');
     });
     if (snap) {
       const sx = snap.part === 'battery' ? 454 : snap.part === 'motor' ? 653 : 503;
       const sy = snap.part === 'body' ? 256 : 304;
-      ctx.strokeStyle = '#dd9b56'; ctx.lineWidth = 3; ctx.globalAlpha = clamp(snap.remaining / .7);
+      ctx.strokeStyle = '#f5bc65'; ctx.lineWidth = 3; ctx.globalAlpha = clamp(snap.remaining / .7);
       ctx.beginPath();
       if (snap.part === 'body') {
         // Keep the installation feedback outside the taller vehicle silhouette.
@@ -562,8 +562,8 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     }
     if (dragging) {
       const target = dragging.part === 'battery' ? { x: 454, y: 304 } : dragging.part === 'motor' ? { x: 653, y: 304 } : { x: 503, y: 256 };
-      ctx.setLineDash([6, 5]); roundRect(ctx, target.x - 80, target.y - 41, 160, 82, 12, '#fff8e855', '#dfaa68'); ctx.setLineDash([]);
-      ctx.save(); ctx.shadowColor = '#607e5966'; ctx.shadowBlur = 18;
+      ctx.setLineDash([6, 5]); roundRect(ctx, target.x - 80, target.y - 41, 160, 82, 12, '#f5bc6522', '#f5bc65'); ctx.setLineDash([]);
+      ctx.save(); ctx.shadowColor = '#47eaff66'; ctx.shadowBlur = 18;
       if (dragging.part === 'battery') batteryIcon(ctx, dragging.x, dragging.y, '#8bc89b', 1.1);
       else if (dragging.part === 'motor') motorIcon(ctx, dragging.x, dragging.y, 1.1);
       else drawBody(ctx, dragging.x, dragging.y, vehicle, 1.1);
@@ -575,23 +575,22 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     const outcome = playbackState.outcome, road = ROADS.find(r => r.id === outcome.route)!;
     const sample = sampleOutcome(outcome, playbackState.elapsed / playbackState.displaySeconds);
     const progress = clamp(sample.distance / road.distance);
-    const sky = ctx.createLinearGradient(0, 0, 0, 400); sky.addColorStop(0, '#e5f2ec'); sky.addColorStop(1, '#fcf7e4');
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, 1000, 520);
-    label(ctx, road.title, 43, 56, 29, '#35543f', 600); label(ctx, road.subtitle, 44, 83, 14, '#758771');
-    roundRect(ctx, 725, 29, 227, 59, 14, '#fffdf2', '#d0dec9');
-    label(ctx, `${playbackState.eventPhase || playbackState.paused || playbackState.finished ? 0 : round(sample.speed)} km/h`, 745, 55, 19, '#42644d', 600);
-    label(ctx, `电量 ${round((batteryOf(outcome.vehicle).value * .65 - sample.energy) / batteryOf(outcome.vehicle).value * 100)}%`, 745, 77, 14, '#7a8d74');
+    nightBackdrop(ctx, 1000, 520, true);
+    label(ctx, road.title, 43, 56, 29, '#e8f3ff', 600); label(ctx, road.subtitle, 44, 83, 14, '#a6bad0');
+    roundRect(ctx, 725, 29, 227, 59, 14, '#111c32', '#3d5b7a');
+    label(ctx, `${playbackState.eventPhase || playbackState.paused || playbackState.finished ? 0 : round(sample.speed)} km/h`, 745, 55, 19, '#e8f3ff', 600);
+    label(ctx, `电量 ${round((batteryOf(outcome.vehicle).value * .65 - sample.energy) / batteryOf(outcome.vehicle).value * 100)}%`, 745, 77, 14, '#a6bad0');
     // Distant hills, trees, campus and a charge stop are all native 2D shapes.
-    ctx.fillStyle = '#d2e3ce'; ctx.beginPath(); ctx.moveTo(0, 288); ctx.quadraticCurveTo(120, 165, 255, 289); ctx.quadraticCurveTo(425, 140, 607, 285); ctx.quadraticCurveTo(800, 186, 1000, 276); ctx.lineTo(1000, 520); ctx.lineTo(0, 520); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#162944'; ctx.beginPath(); ctx.moveTo(0, 288); ctx.quadraticCurveTo(120, 165, 255, 289); ctx.quadraticCurveTo(425, 140, 607, 285); ctx.quadraticCurveTo(800, 186, 1000, 276); ctx.lineTo(1000, 520); ctx.lineTo(0, 520); ctx.closePath(); ctx.fill();
     for (const [x, y, h] of [[66, 257, 42], [216, 232, 60], [744, 237, 49], [899, 220, 73]]) {
-      ctx.fillStyle = '#a4c59c'; ctx.beginPath(); ctx.ellipse(x, y, h * .4, h * .65, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#8eaa80'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(x, y + 11); ctx.lineTo(x, y + h); ctx.stroke();
+      ctx.fillStyle = '#244255'; ctx.beginPath(); ctx.ellipse(x, y, h * .4, h * .65, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#456885'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(x, y + 11); ctx.lineTo(x, y + h); ctx.stroke();
     }
     if (outcome.route === 'city') {
-      roundRect(ctx, 372, 200, 172, 103, 8, '#f2dbab', '#d1bb91');
-      roundRect(ctx, 414, 240, 28, 63, 3, '#c0d7c2');
-      for (let i = 0; i < 4; i++) roundRect(ctx, 389 + i * 35, 218, 19, 23, 3, '#fff8df');
-      label(ctx, '小芽校园', 417, 192, 16, '#8d966c', 600);
+      roundRect(ctx, 372, 200, 172, 103, 8, '#27324a', '#bc98ff70');
+      roundRect(ctx, 414, 240, 28, 63, 3, '#175265');
+      for (let i = 0; i < 4; i++) roundRect(ctx, 389 + i * 35, 218, 19, 23, 3, '#75f1bb');
+      label(ctx, '小芽校园', 417, 192, 16, '#a6bad0', 600);
     }
     const roadY = (x: number) => outcome.route === 'hill' ? 378 - clamp((x - 125) / 760) * 134 : 337;
     const roadPath = (offset: number) => {
@@ -599,13 +598,13 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
       if (outcome.route === 'hill') { ctx.lineTo(125, roadY(125) + offset); ctx.lineTo(885, roadY(885) + offset); }
       ctx.lineTo(1040, roadY(1000) + offset);
     };
-    ctx.strokeStyle = '#bdc9af'; ctx.lineWidth = 61; ctx.lineCap = 'round'; roadPath(0); ctx.stroke();
-    ctx.strokeStyle = '#f6f7e8'; ctx.lineWidth = 3; ctx.setLineDash([24, 19]); roadPath(18); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#1a293e'; ctx.lineWidth = 61; ctx.lineCap = 'round'; roadPath(0); ctx.stroke();
+    ctx.strokeStyle = '#47eaffb8'; ctx.lineWidth = 3; ctx.setLineDash([24, 19]); roadPath(18); ctx.stroke(); ctx.setLineDash([]);
     // Start/finish flags avoid a misleading implication of real-time scale.
     for (const [x, text] of [[115, '出发'], [901, '终点']] as const) {
       const y = roadY(x) - 33;
-      ctx.strokeStyle = '#758d69'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y - 58); ctx.lineTo(x, y); ctx.stroke();
-      roundRect(ctx, x, y - 57, 55, 26, 3, text === '终点' ? '#eeb98d' : '#adc7a1'); label(ctx, text, x + 9, y - 39, 13, '#526d4b');
+      ctx.strokeStyle = '#5a7492'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y - 58); ctx.lineTo(x, y); ctx.stroke();
+      roundRect(ctx, x, y - 57, 55, 26, 3, text === '终点' ? '#452f48' : '#184d49'); label(ctx, text, x + 9, y - 39, 13, '#e8f3ff');
     }
     const carX = 118 + progress * 768, carY = roadY(carX) - 20;
     ctx.save(); ctx.translate(carX, carY); if (outcome.route === 'hill') ctx.rotate(-Math.atan(.18));
@@ -614,46 +613,46 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     const activeEvent = playbackState.challenge.events[Math.min(playbackState.challenge.index, 2)];
     if (!playbackState.finished) {
       const markerX = clamp(carX + 130, 265, 875), markerY = roadY(markerX);
-      roundRect(ctx, markerX - 63, markerY - 124, 126, 42, 10, playbackState.eventPhase ? '#fff0cb' : '#fffdf2', '#c9ad78');
-      label(ctx, activeEvent.scene, markerX - 48, markerY - 98, 17, '#806334', 600);
-      ctx.strokeStyle = '#9a8b69'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(markerX, markerY - 82); ctx.lineTo(markerX, markerY - 27); ctx.stroke();
+      roundRect(ctx, markerX - 63, markerY - 124, 126, 42, 10, playbackState.eventPhase ? '#493841' : '#111c32', '#f5bc65');
+      label(ctx, activeEvent.scene, markerX - 48, markerY - 98, 17, '#f5bc65', 600);
+      ctx.strokeStyle = '#6b819d'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(markerX, markerY - 82); ctx.lineTo(markerX, markerY - 27); ctx.stroke();
       if (outcome.route === 'city') {
         if (activeEvent.scene === '红灯停车') {
-          roundRect(ctx, markerX + 28, markerY - 84, 24, 61, 7, '#3d5350');
-          for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(markerX + 40, markerY - 72 + i * 18, 6, 0, Math.PI * 2); ctx.fillStyle = i === 0 ? '#ed8469' : '#768b75'; ctx.fill(); }
-          ctx.fillStyle = '#fffdf1'; ctx.fillRect(markerX - 42, markerY - 24, 5, 49);
+          roundRect(ctx, markerX + 28, markerY - 84, 24, 61, 7, '#101d33');
+          for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(markerX + 40, markerY - 72 + i * 18, 6, 0, Math.PI * 2); ctx.fillStyle = i === 0 ? '#ff6e91' : '#354864'; ctx.fill(); }
+          ctx.fillStyle = '#d7f5ff'; ctx.fillRect(markerX - 42, markerY - 24, 5, 49);
         } else if (activeEvent.scene === '减速带') {
-          for (let i = 0; i < 5; i++) roundRect(ctx, markerX - 40 + i * 18, markerY - 22, 9, 45, 2, i % 2 ? '#55645a' : '#e7bd60');
+          for (let i = 0; i < 5; i++) roundRect(ctx, markerX - 40 + i * 18, markerY - 22, 9, 45, 2, i % 2 ? '#17263b' : '#f5bc65');
         } else if (activeEvent.scene === '视线遮挡') {
           drawPremiumCar(ctx, markerX + 12, markerY - 28, '#e5bd63', .85, 0, 'touring');
         } else if (activeEvent.scene === '安全送达') {
           roundRect(ctx, markerX - 22, markerY - 56, 40, 31, 3, '#dbb176', '#99734c');
           roundRect(ctx, markerX + 18, markerY - 46, 29, 21, 3, '#e8c99b', '#99734c');
         } else {
-          for (let i = 0; i < 5; i++) roundRect(ctx, markerX - 35 + i * 16, markerY - 20, 9, 44, 1, '#fffdf1');
+          for (let i = 0; i < 5; i++) roundRect(ctx, markerX - 35 + i * 16, markerY - 20, 9, 44, 1, '#d7f5ff');
           ctx.fillStyle = '#d68a66'; ctx.beginPath(); ctx.arc(markerX + 10, markerY - 51, 8, 0, Math.PI * 2); ctx.fill();
           ctx.strokeStyle = '#637d8a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(markerX + 10, markerY - 42); ctx.lineTo(markerX + 10, markerY - 22); ctx.lineTo(markerX, markerY - 9); ctx.moveTo(markerX + 10, markerY - 22); ctx.lineTo(markerX + 21, markerY - 9); ctx.stroke();
         }
       } else if (outcome.route === 'range') {
-        roundRect(ctx, markerX - 18, markerY - 65, 36, 45, 5, '#83b8a2', '#4b7e68');
-        label(ctx, 'ϟ', markerX - 8, markerY - 34, 29, '#fffdf2', 700);
+        roundRect(ctx, markerX - 18, markerY - 65, 36, 45, 5, '#236b63', '#75f1bb');
+        label(ctx, 'ϟ', markerX - 8, markerY - 34, 29, '#e8f3ff', 700);
         if (activeEvent.scene === '雨天车距') {
-          ctx.strokeStyle = '#8aaeb9'; ctx.lineWidth = 1.5;
+          ctx.strokeStyle = '#79b8e3'; ctx.lineWidth = 1.5;
           for (let i = 0; i < 22; i++) { const rx = 70 + i * 41; const ry = 130 + (i % 4) * 35; ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 7, ry + 16); ctx.stroke(); }
         }
       } else {
-        ctx.fillStyle = '#dd9b60'; ctx.beginPath(); ctx.moveTo(markerX, markerY - 64); ctx.lineTo(markerX - 20, markerY - 24); ctx.lineTo(markerX + 20, markerY - 24); ctx.closePath(); ctx.fill();
-        label(ctx, '!', markerX - 4, markerY - 33, 21, '#fff8df', 700);
+        ctx.fillStyle = '#f5bc65'; ctx.beginPath(); ctx.moveTo(markerX, markerY - 64); ctx.lineTo(markerX - 20, markerY - 24); ctx.lineTo(markerX + 20, markerY - 24); ctx.closePath(); ctx.fill();
+        label(ctx, '!', markerX - 4, markerY - 33, 21, '#e8f3ff', 700);
       }
     }
-    roundRect(ctx, 40, 422, 920, 65, 16, '#f7f7ea', '#d0ddc7');
-    label(ctx, `${round(sample.distance / 1000, outcome.route === 'range' ? 1 : 2)} / ${round(road.distance / 1000, 1)} km`, 62, 452, 20, '#52764e', 600);
-    label(ctx, `使用 ${round(sample.energy, 2)} kWh`, 63, 475, 13, '#8a977f');
+    roundRect(ctx, 40, 422, 920, 65, 16, '#111c32', '#3d5b7a');
+    label(ctx, `${round(sample.distance / 1000, outcome.route === 'range' ? 1 : 2)} / ${round(road.distance / 1000, 1)} km`, 62, 452, 20, '#e8f3ff', 600);
+    label(ctx, `使用 ${round(sample.energy, 2)} kWh`, 63, 475, 13, '#a6bad0');
     drawChain(ctx, 452, !playbackState.paused && !playbackState.finished && !playbackState.eventPhase);
-    label(ctx, playbackState.finished ? '挑战记录已保存' : playbackState.eventPhase ? '已停稳 · 请在下方选择' : playbackState.paused ? '已暂停 · 可以继续' : '前进中 · 留意路况', 784, 455, 12, '#526b4c');
+    label(ctx, playbackState.finished ? '挑战记录已保存' : playbackState.eventPhase ? '已停稳 · 请在下方选择' : playbackState.paused ? '已暂停 · 可以继续' : '前进中 · 留意路况', 784, 455, 12, '#e8f3ff');
     if (playbackState.finished) {
-      roundRect(ctx, 372, 115, 263, 53, 20, '#fff9e8', '#ddc99c');
-      label(ctx, outcome.ratio >= .999 ? '✦ 到站啦！你的小车真棒' : '✦ 有新发现，再换个搭档', 397, 148, 18, '#92733e', 600);
+      roundRect(ctx, 372, 115, 263, 53, 20, '#302941', '#f5bc65');
+      label(ctx, outcome.ratio >= .999 ? '✦ 到站啦！你的小车真棒' : '✦ 有新发现，再换个搭档', 397, 148, 18, '#f5bc65', 600);
     }
   }
 

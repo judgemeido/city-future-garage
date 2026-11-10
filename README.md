@@ -1,12 +1,16 @@
 # 城市未来车厂 · 智驾小工程师
 
-八款独立的二维 HTML 科普体验：汽车的超级眼睛、我的新能源车厂、我教的 AI 小司机、刹车充电秀、自动泊车训练营、汽车故障急救站、充电站小站长、雨天抓地力挑战。新增四款以“操作触发特效，特效实时跟手”为重点，并加入六张实物照片作为观察依据。
+八款独立的二维 HTML 科普体验：汽车的超级眼睛、我的新能源车厂、我教的 AI 小司机、刹车充电秀、自动泊车训练营、汽车故障急救站、充电站小站长、雨天抓地力挑战。大厅、八游戏与作品页已统一为赛博朋克夜城风格。新增四款以“操作触发特效，特效实时跟手”为重点，并加入六张实物照片作为观察依据。
+
+![赛博朋克体验大厅](docs/preview/home-cyberpunk.png)
+
+视觉、UI与验证方案见 [八游戏赛博朋克改造](docs/cyberpunk-redesign.md)。
 
 ## 直接运行
 
 双击根目录的 `城市未来车厂-双击打开.html` 即可离线体验；图片、脚本和样式均内嵌，建议使用 Chrome 或 Edge。源码在 GitHub 下载后，可直接在仓库页面打开该 HTML 文件，或克隆到本机运行。
 
-左侧可滚动导航随时切换八款游戏，每款三关均开放。每款 100 分，共 800 分、8 枚体验章；参与与探索只加分；完成主体验即可盖章，低分也可继续和下载报告。
+电脑使用左侧滚动导航，手机使用顶部横向导航。大厅可按创造、驾驶与能量、感知与检测筛选，也可继续最近的体验；每款三关均开放。每款 100 分，共 800 分、8 枚体验章；参与与探索只加分；完成主体验即可盖章，低分也可继续和下载报告。
 
 点击“我的工位”修改昵称与工位号。记录自动保存在当前浏览器的本机存储中，旧四款存档自动补齐新增条目，保留原昵称、车辆、积分与截图。每位学生应在自己的电脑浏览器操作；本版本不含跨电脑实时排名或教师汇总端。
 
@@ -75,18 +79,18 @@ Node.js 22.18+ 可运行 `npm test`，验证挑战推进、八游戏存档升级
 
 ## 预览
 
-![体验大厅与车辆插画](docs/preview/home.png)
+![八游戏与作品页的赛博朋克桌面总览](docs/preview/desktop-cyberpunk.png)
 
-![新能源车工坊与细化后的车型](docs/preview/vehicles.png)
+![赛博朋克新能源车工坊](docs/preview/factory-cyberpunk.png)
 
 ![重做后的三款车与侧视、俯视对照](docs/preview/vehicle-models.png)
 
-![电脑浏览器与六张感知场景](docs/preview/perception.png)
+![电脑浏览器与六张感知场景](docs/preview/perception-cyberpunk.png)
 
-![泊车光轨与真实停车场观察](docs/preview/parking-real-photo.png)
+![泊车光轨与真实停车场观察](docs/preview/parking-cyberpunk.png)
 
-![手势扫描与实物底盘观察](docs/preview/repair-real-photo.png)
+![手势扫描与实物底盘观察](docs/preview/repair-cyberpunk.png)
 
-![充电光流与真实接口观察](docs/preview/charging-real-photo.png)
+![充电光流与真实接口观察](docs/preview/charging-cyberpunk.png)
 
-![雨天实验与真实轮胎观察](docs/preview/grip-real-photo.png)
+![雨天实验与真实轮胎观察](docs/preview/grip-cyberpunk.png)
