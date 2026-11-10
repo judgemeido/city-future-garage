@@ -3,6 +3,7 @@ import { drawPremiumTopCar } from '../car-art';
 import type { GameAPI, MountedGame } from '../types';
 import './perception.css';
 import { PERCEPTION_SCENES, type SceneTarget, type TargetId } from './perception-scenes';
+import { drawPerceptionWeather } from './perception-weather';
 
 type Sensor = 'camera' | 'lidar' | 'radar';
 const SENSOR_LABELS: Record<Sensor, string> = { camera: '摄像头', lidar: '激光雷达', radar: '毫米波雷达' };
@@ -524,25 +525,15 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
     ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 12); ctx.clip();
     if (imageLoaded) {
       const rect = imageRect();
-      ctx.fillStyle = '#0e2534'; ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#111c32'; ctx.fillRect(x, y, w, h);
       ctx.drawImage(image, rect.x, rect.y, rect.w, rect.h);
     } else {
-      ctx.fillStyle = '#0e2534'; ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#111c32'; ctx.fillRect(x, y, w, h);
       label(ctx, imageFailed ? '照片未能载入，请重试或切换场景' : '正在载入道路照片…', x + 260, y + h / 2, 22, '#b4d0e0');
     }
     if (view === 'photo') { ctx.restore(); return; }
     ctx.fillStyle = `rgba(4,13,30,${(100 - config.light) / 100 * .62})`; ctx.fillRect(x, y, w, h);
-    const fog = config.fog / 100;
-    const fogGradient = ctx.createLinearGradient(0, y, 0, y + h);
-    fogGradient.addColorStop(0, `rgba(193,215,221,${fog * .72})`); fogGradient.addColorStop(1, `rgba(188,210,218,${fog * .30})`);
-    ctx.fillStyle = fogGradient; ctx.fillRect(x, y, w, h);
-    if (config.rain > 0) {
-      ctx.strokeStyle = `rgba(199,230,246,${config.rain / 100 * .65})`; ctx.lineWidth = 1;
-      for (let i = 0; i < Math.round(config.rain * .75); i++) {
-        const rx = x + ((i * 97.2 + time * 49) % w), ry = y + ((i * 56.8 + time * 220) % h);
-        ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 5, ry + 13); ctx.stroke();
-      }
-    }
+    drawPerceptionWeather(ctx, PHOTO, config.fog, config.rain, time, api.reducedMotion());
     ctx.restore();
   }
   function imageRect() {
@@ -560,8 +551,8 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
   }
   function drawPointCloud(ctx: CanvasRenderingContext2D, time: number) {
     const model = perceptionModel(config), active = config.lidar || config.radar || config.camera;
-    ctx.fillStyle = '#071c2c'; ctx.fillRect(PHOTO.x, PHOTO.y, PHOTO.w, PHOTO.h);
-    ctx.strokeStyle = '#143247'; ctx.lineWidth = 1;
+    ctx.fillStyle = '#080e21'; ctx.fillRect(PHOTO.x, PHOTO.y, PHOTO.w, PHOTO.h);
+    ctx.strokeStyle = '#203655'; ctx.lineWidth = 1;
     for (let i = 0; i < 13; i++) { const xx = PHOTO.x + i * PHOTO.w / 12; ctx.beginPath(); ctx.moveTo(PHOTO.x + PHOTO.w / 2, PHOTO.y + 80); ctx.lineTo(xx, PHOTO.y + PHOTO.h); ctx.stroke(); }
     for (let yy = PHOTO.y + 125; yy < PHOTO.y + PHOTO.h; yy += 30) { ctx.beginPath(); ctx.moveTo(PHOTO.x, yy); ctx.lineTo(PHOTO.x + PHOTO.w, yy); ctx.stroke(); }
     if (!active) { label(ctx, '请选择至少一种传感器', PHOTO.x + 230, PHOTO.y + 170, 17, '#abc4d6'); return; }
@@ -603,20 +594,20 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
       ctx.setLineDash(isFound ? [] : [4, 4]); ctx.strokeRect(rect.x, rect.y, rect.w, rect.h); ctx.setLineDash([]); ctx.globalAlpha = 1;
       if (isSelected || isFound) {
         const tagY = Math.max(PHOTO.y + 28, rect.y - 9);
-        roundRect(ctx, rect.x - 1, tagY - 18, target.name.length * 13 + 49, 22, 4, '#061827e8');
+        roundRect(ctx, rect.x - 1, tagY - 18, target.name.length * 13 + 49, 22, 4, '#080e21e8');
         label(ctx, `${isFound ? '✓ ' : ''}${target.name} · 标注`, rect.x + 5, tagY - 2, 11, target.color);
       }
     }
   }
   function drawBEV(ctx: CanvasRenderingContext2D, time: number) {
     const { x, y, w, h } = BEV;
-    roundRect(ctx, x, y, w, h, 12, '#0b2236', '#203f54');
+    roundRect(ctx, x, y, w, h, 12, '#111c32', '#3d5b7a');
     ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 12); ctx.clip();
-    ctx.strokeStyle = '#15384d'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#233d60'; ctx.lineWidth = 1;
     for (let yy = y + 37; yy < y + h; yy += 24) { ctx.beginPath(); ctx.moveTo(x + 14, yy); ctx.lineTo(x + w - 14, yy); ctx.stroke(); }
     for (let xx = x + 14; xx < x + w; xx += 24) { ctx.beginPath(); ctx.moveTo(xx, y + 35); ctx.lineTo(xx, y + h); ctx.stroke(); }
-    ctx.fillStyle = '#143449'; ctx.fillRect(x + w * .32, y + 37, w * .37, h - 61);
-    ctx.strokeStyle = '#426276'; ctx.setLineDash([7, 9]); ctx.beginPath(); ctx.moveTo(x + w * .50, y + 46); ctx.lineTo(x + w * .50, y + h - 22); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#182b44'; ctx.fillRect(x + w * .32, y + 37, w * .37, h - 61);
+    ctx.strokeStyle = '#486886'; ctx.setLineDash([7, 9]); ctx.beginPath(); ctx.moveTo(x + w * .50, y + 46); ctx.lineTo(x + w * .50, y + h - 22); ctx.stroke(); ctx.setLineDash([]);
     const carY = trial ? y + h - 47 - Math.min(195, trial.traveled * 4.06) : y + h - 47;
     const carX = x + w * .5;
     const model = perceptionModel(trial && !trial.ended ? trial.config : config);
@@ -660,27 +651,27 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
   }
   function drawWave(ctx: CanvasRenderingContext2D) {
     const { x, y, w, h } = WAVE;
-    roundRect(ctx, x, y, w, h, 10, '#0b2236', '#203f54');
+    roundRect(ctx, x, y, w, h, 10, '#111c32', '#3d5b7a');
     const tofNs = distance * 2 / .299792458;
     label(ctx, 'ToF / 光波飞行时间', x + 14, y + 22, 13, '#c6deeb', 600);
     label(ctx, `${distance} m → 往返 ${tofNs.toFixed(1)} ns`, x + 14, y + 47, 12, '#65e3cb');
     label(ctx, 'd = c × Δt ÷ 2', x + w - 183, y + 24, 15, '#d7e9f1');
     label(ctx, '距离越远，回波越晚', x + w - 183, y + 47, 11, '#9fc0d1');
     const wx = x + 24, wy = y + 122, ww = w - 48;
-    ctx.strokeStyle = '#30536b'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx + ww, wy); ctx.stroke();
+    ctx.strokeStyle = '#486886'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx + ww, wy); ctx.stroke();
     const emitted = wx + 15, received = emitted + tofNs / 420 * (ww - 40);
     ctx.strokeStyle = '#75b8ff'; ctx.lineWidth = 2;
     ctx.beginPath(); for (let xx = 0; xx <= ww; xx += 2) { const py = wy - 35 * Math.exp(-Math.pow((wx + xx - emitted) / 8, 2)); if (xx === 0) ctx.moveTo(wx + xx, py); else ctx.lineTo(wx + xx, py); } ctx.stroke();
     ctx.strokeStyle = '#61e7cd'; ctx.beginPath(); for (let xx = 0; xx <= ww; xx += 2) { const py = wy - 31 * Math.exp(-Math.pow((wx + xx - received) / 11, 2)); if (xx === 0) ctx.moveTo(wx + xx, py); else ctx.lineTo(wx + xx, py); } ctx.stroke();
     label(ctx, '发射', emitted - 7, y + 77, 10, '#75b8ff'); label(ctx, '回波', Math.min(received - 8, wx + ww - 24), y + 77, 10, '#61e7cd');
-    for (let tick = 0; tick <= 400; tick += 100) label(ctx, `${tick}`, emitted + tick / 420 * (ww - 40) - 5, y + 139, 9, '#6d91a7');
-    label(ctx, 'ns', wx + ww - 12, y + 139, 9, '#6d91a7');
+    for (let tick = 0; tick <= 400; tick += 100) label(ctx, `${tick}`, emitted + tick / 420 * (ww - 40) - 5, y + 139, 9, '#9eb4cd');
+    label(ctx, 'ns', wx + ww - 12, y + 139, 9, '#9eb4cd');
     label(ctx, '光速 c ≈ 0.30 m/ns · 教学波形，并非照片实测', x + 14, y + h - 14, 10, '#85a8ba');
   }
   function drawDiagnostics(ctx: CanvasRenderingContext2D, time: number) {
-    ctx.fillStyle = '#061827'; ctx.fillRect(0, 0, 1000, 360);
+    ctx.fillStyle = '#080e21'; ctx.fillRect(0, 0, 1000, 360);
     drawBEV(ctx, time); drawWave(ctx);
-    roundRect(ctx, 338, 16, 644, 130, 10, '#0b2236', '#203f54');
+    roundRect(ctx, 338, 16, 644, 130, 10, '#111c32', '#3d5b7a');
     const resultHeading = trial?.ended
       ? trial.safe ? `本次 AEB：安全停下 · 余量 ${trial.gap.toFixed(1)} m` : '本次 AEB：发现过晚 · 教学系统已暂停'
       : '传感器状态 / 教学探测模型';
@@ -689,14 +680,14 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
     const model = perceptionModel(modelConfig);
     (['camera', 'lidar', 'radar'] as Sensor[]).forEach((sensor, i) => {
       const sx = 353 + i * 209;
-      label(ctx, SENSOR_LABELS[sensor], sx, 67, 12, modelConfig[sensor] ? '#d6eef6' : '#7891a3');
-      label(ctx, modelConfig[sensor] ? `${Math.round(model.quality[sensor] * 100)}%` : '未启用', sx, 99, 23, modelConfig[sensor] ? '#7af0d3' : '#58778b', 600);
+      label(ctx, SENSOR_LABELS[sensor], sx, 67, 12, modelConfig[sensor] ? '#d6eef6' : '#9eb4cd');
+      label(ctx, modelConfig[sensor] ? `${Math.round(model.quality[sensor] * 100)}%` : '未启用', sx, 99, 23, modelConfig[sensor] ? '#7af0d3' : '#9eb4cd', 600);
       label(ctx, `教学范围 ${model.ranges[sensor].toFixed(1)} m`, sx, 125, 10, '#89aabd');
     });
   }
   function drawWorld(ctx: CanvasRenderingContext2D, time: number) {
-    ctx.fillStyle = '#061827'; ctx.fillRect(0, 0, 1000, 660);
-    label(ctx, 'PERCEPTION / 城市道路感知', 20, 25, 13, '#d1e5ef', 600);
+    ctx.fillStyle = '#080e21'; ctx.fillRect(0, 0, 1000, 660);
+    label(ctx, 'PERCEPTION / 城市道路感知', 20, 25, 13, '#47eaff', 600);
     label(ctx, imageLoaded ? view === 'photo' ? '清晰原图 · 点击“放大实景”查看原始细节' : '实景照片 + 人工教学标注' : imageFailed ? '照片载入失败' : '照片载入中', 687, 25, 11, '#8fb3c6');
     drawPhoto(ctx, time);
     if (view !== 'photo') {
@@ -718,11 +709,11 @@ export function mountPerception(host: HTMLElement, api: GameAPI): MountedGame {
       label(ctx, '‹ ›', lineX - 12, PHOTO.y + PHOTO.h * .5 + 6, 15, '#174759', 600);
     }
     if (view !== 'photo') {
-      roundRect(ctx, PHOTO.x + 12, PHOTO.y + 10, 89, 22, 4, '#061827c9'); label(ctx, '实景 / 图像', PHOTO.x + 20, PHOTO.y + 26, 11, '#dceaf2');
-      roundRect(ctx, PHOTO.x + PHOTO.w - 169, PHOTO.y + 10, 157, 22, 4, '#061827e8'); label(ctx, '感知层 / 教学仿真', PHOTO.x + PHOTO.w - 159, PHOTO.y + 26, 11, '#74e9d3');
+      roundRect(ctx, PHOTO.x + 12, PHOTO.y + 10, 89, 22, 4, '#080e21c9'); label(ctx, '实景 / 图像', PHOTO.x + 20, PHOTO.y + 26, 11, '#dceaf2');
+      roundRect(ctx, PHOTO.x + PHOTO.w - 169, PHOTO.y + 10, 157, 22, 4, '#080e21e8'); label(ctx, '感知层 / 教学仿真', PHOTO.x + PHOTO.w - 159, PHOTO.y + 26, 11, '#74e9d3');
     }
-    label(ctx, `Photo: ${scene.author} / Wikimedia Commons · ${scene.license}`, 22, 655, 9, '#7395a8');
-    label(ctx, view === 'photo' ? '原图模式 · 无天气遮罩' : '点云为二维边缘与目标示意 · 距离为教学设定', 706, 655, 9, '#7395a8');
+    label(ctx, `Photo: ${scene.author} / Wikimedia Commons · ${scene.license}`, 22, 655, 9, '#9eb4cd');
+    label(ctx, view === 'photo' ? '原图模式 · 无天气遮罩' : '点云为二维边缘与目标示意 · 距离为教学设定', 706, 655, 9, '#9eb4cd');
   }
 
   loadSceneImage(); markComplete();
