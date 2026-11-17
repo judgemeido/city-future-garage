@@ -6,6 +6,9 @@ output/
 qa/
 artifacts/
 release/
+.ddr-cyberpunk-build/
+smart-driving-exploration-classroom/
+smart-driving-exploration-classroom-git/
 *.zip
 .env
 .env.*

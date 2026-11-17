@@ -139,8 +139,17 @@ export function mountLabMedia(host: HTMLElement, id: LabId) {
       const output=document.createElement('canvas');output.width=1200;output.height=560;const c=output.getContext('2d')!;
       c.fillStyle='#0f1b30';c.fillRect(0,0,1200,560);c.imageSmoothingQuality='high';
       label(c,'我的操作记录 · 教学模型',22,36,18,'#e8f3ff',600);label(c,photos[photoIndex].name+' · 实物观察',758,36,16,'#e8f3ff',600);
-      c.drawImage(model,20,62,720,360);
-      if(loaded){const p=photoRect(),scale=Math.min(424/p.w,360/p.h),w=p.w*scale,h=p.h*scale;c.drawImage(canvas,p.x*density,p.y*density,p.w*density,p.h*density,756+(424-w)/2,62+(360-h)/2,w,h);}else label(c,'实物照片未加载，本次只保存教学模型',763,245,14,'#e8f3ff');
+      const modelScale=Math.min(720/model.width,360/model.height),modelWidth=model.width*modelScale,modelHeight=model.height*modelScale;
+      c.drawImage(model,20+(720-modelWidth)/2,62+(360-modelHeight)/2,modelWidth,modelHeight);
+      if(loaded){
+        if(id==='parking'){
+          // Parking's photo normally lives in a closed details panel. Export from the source
+          // image rather than a hidden/zero-sized display canvas, keeping the current observation.
+          const scale=Math.min(424/loaded.naturalWidth,360/loaded.naturalHeight),w=loaded.naturalWidth*scale,h=loaded.naturalHeight*scale,x=756+(424-w)/2,y=62+(360-h)/2;
+          c.drawImage(loaded,x,y,w,h);c.strokeStyle='#8cffe9';c.lineWidth=2;c.beginPath();c.moveTo(x+scan*w,y);c.lineTo(x+scan*w,y+h);c.stroke();
+          photos[photoIndex].points.forEach((item,i)=>{const px=x+item.x*w,py=y+item.y*h;c.fillStyle='#111c32e8';c.strokeStyle=i===point?'#ffdb87':'#9af3ff';c.lineWidth=2;c.beginPath();c.arc(px,py,i===point?12:9,0,Math.PI*2);c.fill();c.stroke();label(c,String(i+1),px-3.5,py+4,11,i===point?'#ffdb87':'#9af3ff',700);});
+        }else{const p=photoRect(),scale=Math.min(424/p.w,360/p.h),w=p.w*scale,h=p.h*scale;c.drawImage(canvas,p.x*density,p.y*density,p.w*density,p.h*density,756+(424-w)/2,62+(360-h)/2,w,h);}
+      }else label(c,'实物照片未加载，本次只保存教学模型',763,245,14,'#e8f3ff');
       const s=source();
       label(c,`观察点：${photos[photoIndex].points[point].name} · 摄影 ${s.author} / ${s.license}`,22,455,14,'#d3e5f8');
       label(c,'照片展示实物；人工标注、光流、读数、条件和轨迹均为教学示意。',22,481,13,'#aebfd3');

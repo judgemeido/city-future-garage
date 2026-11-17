@@ -25,22 +25,16 @@ async function check(name,run){try{await run();console.log('PASS',name);}catch(e
     await page.addInitScript(seed=>{if(!sessionStorage.getItem('qa-seeded')){localStorage.setItem('city-future-garage-v1',JSON.stringify(seed));sessionStorage.setItem('qa-seeded','1');}}, {version:1,profile:{nickname:'旧存档工程师',workstation:'09'},vehicle:{name:'旧赛车',color:'#d99773',body:'sport'},progress:{factory:{awards:{save:{points:40,label:'作品'}},completed:true,data:{best:{city:3}}}},muted:true});
     await visit('home');
 assert.equal(await page.locator('[data-game-card]').count(),8);assert.match(await page.locator('.score-pill').first().textContent(),/40.*800/);assert.match(await page.locator('[data-profile-name]').textContent(),/旧存档/);
-    await visit('parking');await click(800,340);await page.locator('[data-save]').click();const s=await record();assert.equal(s.vehicle.body,'sport');assert.equal(s.progress.factory.awards.save.points,40);assert.equal(Object.keys(s.progress).length,8);
+    await visit('parking');await page.locator('[data-add="1"]').click();await page.locator('[data-save]').click();const s=await record();assert.equal(s.vehicle.body,'sport');assert.equal(s.progress.factory.awards.save.points,40);assert.equal(Object.keys(s.progress).length,8);
   });
-  await check('parking light rail follows dragging, hold and space release stop movement immediately',async()=>{
-    await visit('parking');await drag(480,300,480,280);assert.ok(Math.abs(Number((await data()).handleY)-280)<2);assert.equal((await data()).routeValid,'true');
-    const b=await page.locator('[data-hold]').boundingBox();await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();await page.waitForTimeout(450);assert.ok(Number((await data()).distance)>10);await page.mouse.up();const paused=Number((await data()).distance);await page.waitForTimeout(160);assert.equal(Number((await data()).distance),paused);
-    await page.locator('[data-hold]').blur();await page.locator('body').click({position:{x:Math.min(1100,1200),y:20}});await page.keyboard.down('Space');await page.waitForTimeout(200);await page.keyboard.up('Space');assert.ok(Number((await data()).distance)>paused);
-    const stopped=Number((await data()).distance);await page.waitForTimeout(120);assert.equal(Number((await data()).distance),stopped);
-    await page.locator('[data-toggle]').click();await page.evaluate(()=>window.dispatchEvent(new Event('blur')));assert.equal((await data()).running,'false');
-    await page.locator('[data-toggle]').click();await finished();assert.equal((await data()).collisions,undefined);assert.match(await page.locator('[data-result]').textContent(),/完整停入/);await page.locator('[data-save]').click();await shot('parking-completed');
-    const score1=(await record()).progress.parking.awards;await page.locator('[data-save]').click();assert.deepEqual((await record()).progress.parking.awards,score1);
-    for(const scene of [1,2]){await page.locator(`[data-scene="${scene}"]`).click();assert.equal((await data()).routeValid,'true');await page.locator('[data-toggle]').click();await finished();}
+  await check('parking starts empty and preserves revised geometry and science workflow',async()=>{
+    await visit('parking');assert.equal((await data()).segmentCount,'0');assert.equal(await page.locator('[data-execute]').isDisabled(),true);
+    await page.locator('[data-add="1"]').click();await page.locator('[data-length-number]').fill('5');await page.locator('[data-length-number]').press('Tab');
+    await page.locator('[data-execute]').click();await page.waitForTimeout(400);await page.locator('[data-execute]').click();const paused=(await data()).distance;await page.waitForTimeout(120);assert.equal((await data()).distance,paused);
+    await page.locator('[data-execute]').click();await finished();assert.equal((await data()).stars,'0');await page.locator('[data-retry]').click();assert.equal((await data()).segmentCount,'1');
+    await page.locator('[data-science="2"]').click();await page.locator('[data-compare-control]').click();await page.locator('[data-evidence]').click();await page.locator('[data-save]').click();await shot('parking-science-v2');
+    for(const scene of [0,1,2]){await page.locator(`[data-scene="${scene}"]`).click();const details=page.locator('.parking-extras>details').nth(1);if(!await details.evaluate(el=>el.open))await details.locator(':scope>summary').click();await page.locator('[data-demo]').click();await page.locator('[data-execute]').click();await finished();assert.equal((await data()).assisted,'true');assert.equal((await data()).stars,'0');assert.match(await page.locator('[data-result]').textContent(),/完整入位/);}
     assert.equal((await record()).progress.parking.completed,true);
-  });
-  await check('parking rejects conflicting routes and cancellation preserves the previous rail',async()=>{
-    await visit('parking');await drag(480,300,480,95);assert.equal((await data()).routeValid,'false');await page.locator('[data-hold]').click();assert.equal((await data()).distance,'0.00');
-    await page.locator('[data-reset]').click();await move(480,300);await page.mouse.down();await move(480,240);await page.locator('.lab-stage canvas').dispatchEvent('pointercancel');await page.mouse.up();assert.equal((await data()).handleY,'300');
   });
   await check('repair scanner follows input, wrong replacement fails, all three actual repairs pass',async()=>{
     await visit('repair');await drag(120,260,710,270);assert.equal((await data()).evidence,'3');assert.ok(Math.abs(Number((await data()).scannerX)-710)<2);await shot('repair-scanned');
@@ -92,9 +86,9 @@ assert.equal(await page.locator('[data-game-card]').count(),8);assert.match(awai
     await page.setViewportSize({width:390,height:844});await visit('repair');await drag(120,260,710,270);assert.equal((await data()).evidence,'3');assert.ok(Math.abs(Number((await data()).scannerX)-710)<3);await shot('repair-narrow');await visit('grip');await shot('grip-narrow');
   });
   await check('reduced motion retains operations and navigation releases held inputs',async()=>{
-    await page.setViewportSize({width:1366,height:768});await visit('parking');await page.locator('[data-action="motion"]').click();assert.ok(await page.locator('html').evaluate(el=>el.classList.contains('reduce-motion')));await page.locator('[data-toggle]').click();await page.waitForTimeout(180);await visit('grip');assert.equal((await data()).time,'0.000');await page.waitForTimeout(200);assert.equal((await data()).time,'0.000');await visit('parking');assert.equal((await data()).running,'false');
+    await page.setViewportSize({width:1366,height:768});await visit('parking');await page.locator('[data-action="motion"]').click();assert.ok(await page.locator('html').evaluate(el=>el.classList.contains('reduce-motion')));await page.locator('[data-add="1"]').click();await page.locator('[data-execute]').click();await page.waitForTimeout(180);await visit('grip');assert.equal((await data()).time,'0.000');await page.waitForTimeout(200);assert.equal((await data()).time,'0.000');await visit('parking');assert.equal((await data()).running,'false');
   });
   await check('no runtime errors across inputs, retries, navigation and resize',async()=>assert.deepEqual(errors,[]));
-  await browser.close();fs.writeFileSync('output/playwright/new-games-qa.json',JSON.stringify({base,date:'2026-11-10',failures,errors},null,2));
+  await browser.close();fs.writeFileSync('output/playwright/new-games-qa.json',JSON.stringify({base,date:'2026-11-11',failures,errors},null,2));
   if(failures.length)process.exitCode=1;
 })().catch(error=>{console.error(error);process.exitCode=1;});

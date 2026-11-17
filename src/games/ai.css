@@ -21,7 +21,9 @@
 .ai-experience .ai-panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
 .ai-experience .ai-panel-title h3 { margin: 0; color: var(--ai-ink); font-size: 16px; }
 .ai-experience .ai-panel-title span { color: #9eb4cd; font-size: 12px; }
-.ai-experience .ai-road-cards { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
+.ai-experience .ai-road-cards { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+.ai-experience .ai-example-picker { display:grid; gap:7px; margin-top:12px; font-size:12px; color:#b8c8de; }
+.ai-experience .ai-example-picker select { min-width:0; width:100%; min-height:40px; padding:8px; background:#0b1224; color:#e8f3ff; border:1px solid #53657c; border-radius:7px; font:inherit; }
 .ai-experience .ai-road-card { border: 1.5px solid #30455f; border-radius: 12px; background: #111c32; padding: 12px 5px 10px; color: #e8f3ff; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; font: inherit; font-size: 12px; position: relative; transition: background .15s,border-color .15s,transform .15s; }
 .ai-experience .ai-road-card:hover { transform: translateY(-2px); background: #111c32; }
 .ai-experience .ai-road-card[aria-pressed=true] { background: #19263e; border-color: #30455f; color: #e8f3ff; }
@@ -102,6 +104,12 @@
 .ai-experience .ai-action-button[data-action=go][aria-pressed=true] { background:#153b35; border-color:#75f1bb; }
 .ai-experience .ai-action-button[data-action=slow][aria-pressed=true] { background:#352c25; border-color:#f5bc65; }
 .ai-experience .ai-action-button[data-action=wait][aria-pressed=true] { background:#35253b; border-color:#ed71bd; }
+.ai-experience .ai-action-button[data-action=yield] strong { color:#47eaff; }
+.ai-experience .ai-action-button[data-action=detour] strong { color:#bc98ff; }
+.ai-experience .ai-action-button[data-action=stop] strong { color:#ff98a7; }
+.ai-experience .ai-action-button[data-action=yield][aria-pressed=true] { background:#143848; border-color:#47eaff; }
+.ai-experience .ai-action-button[data-action=detour][aria-pressed=true] { background:#302744; border-color:#bc98ff; }
+.ai-experience .ai-action-button[data-action=stop][aria-pressed=true] { background:#3a2530; border-color:#ff98a7; }
 .ai-experience .ai-action-button span { color:#b3c5db; }
 .ai-experience .ai-teaching-feedback { color:#b3c5db; }
 .ai-experience .ai-model-button { min-height:44px; background:#bc98ff; color:#101624; border-color:#bc98ff; box-shadow:0 0 18px #bc98ff18; }
@@ -122,3 +130,11 @@
 .ai-experience .ai-result-panel { border-top:2px solid #bc98ff; }
 .ai-experience button:focus-visible,.ai-experience select:focus-visible { outline:3px solid #bc98ff; outline-offset:3px; }
 @media(max-width:600px) { .ai-experience .ai-road-card { min-height:74px; } .ai-experience .ai-action-button strong { font-size:17px; } .ai-experience .ai-speed-label select { min-height:44px; } }
+
+@media(min-width:1101px) {
+ .ai-experience .ai-world-column { position:sticky; top:18px; }
+ .ai-experience .ai-road-card { min-height:46px; flex-direction:row; justify-content:center; padding:8px 4px; gap:5px; font-size:10px; }
+ .ai-experience .ai-card-icon { width:22px; height:22px; font-size:17px; flex:none; }
+ .ai-experience .ai-action-button { min-height:62px; padding:8px 5px; }
+ .ai-experience .ai-card-description { font-size:12px; }
+}

@@ -13,17 +13,18 @@ let activeBrowser;
   const page=await context.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   fs.mkdirSync('output/playwright',{recursive:true});
-  const visit=async id=>{await page.goto(base+'#'+id);await page.waitForFunction(()=>document.querySelector('#game-host')?.dataset.photoState==='ready');await page.waitForSelector('.lab-stage canvas[data-logical-width]');};
+  const visit=async id=>{await page.goto(base+'#'+id);await page.waitForFunction(()=>document.querySelector('#game-host')?.dataset.photoState==='ready');await page.waitForSelector('.lab-stage canvas[data-logical-width]');if(id==='parking'){const d=page.locator('.parking-extras>details').first();if(!await d.evaluate(e=>e.open))await d.locator(':scope > summary').click();}};
   const data=()=>page.locator('#game-host').evaluate(el=>({...el.dataset}));
   const image=()=>page.locator('[data-photo-canvas]').evaluate(c=>c.toDataURL());
   const click=async(x,y)=>{const b=await page.locator('.lab-stage canvas').boundingBox();await page.mouse.click(b.x+x*b.width/1000,b.y+y*b.height/500);};
   const scanPhoto=async()=>{
-    await page.locator('[data-photo-canvas]').scrollIntoViewIfNeeded();
+    await page.locator('[data-photo-canvas]').evaluate(e=>e.scrollIntoView({block:'center',behavior:'instant'}));
+    await page.waitForFunction(()=>{const r=document.querySelector('[data-photo-canvas]').getBoundingClientRect();return r.y>=0&&r.bottom<=innerHeight;});
     const b=await page.locator('[data-photo-canvas]').boundingBox();
     await page.mouse.move(b.x+b.width*.35,b.y+b.height*.5);await page.mouse.down();
     await page.mouse.move(b.x+b.width*.58,b.y+b.height*.5,{steps:10});const mid=Number((await data()).photoScan);
     await page.mouse.move(b.x+b.width*.75,b.y+b.height*.5,{steps:10});const end=Number((await data()).photoScan);
-    assert.ok(end>mid+.1,'photo scan must move while pointer remains down');await page.mouse.up();
+    assert.ok(end>mid+.1,`photo scan must move while pointer remains down (${page.url()}, ${page.viewportSize().width}px, ${mid}→${end}, ${JSON.stringify(b)})`);await page.mouse.up();
   };
   const sourceIds=new Set();
   for(const id of ids){
@@ -45,7 +46,7 @@ let activeBrowser;
     for(let i=count-1;i>=0;i--){await page.locator(`[data-photo-select="${i}"]`).click();await page.waitForFunction(()=>document.querySelector('#game-host').dataset.photoState==='ready');sourceIds.add((await data()).photoId);assert.match(await page.locator('[data-photo-credit]').textContent(),/CC BY/);}
     await page.locator('.lab-photo-source summary').click();
     // Save a real personal action, then check that the evidence follows its photo.
-    if(id==='parking')await click(800,340);
+    if(id==='parking')await page.locator('[data-add="1"]').click();
     if(id==='repair')await click(330,270);
     if(id==='charging'){await click(285,412);await click(370,200);}
     if(id==='grip'){await page.locator('[data-variable-slider]').focus();await page.keyboard.press('ArrowRight');}
@@ -68,11 +69,9 @@ let activeBrowser;
   await page.locator('[data-pause]').click();await page.locator('[data-photo-zoom]').click();assert.equal((await data()).running,'false');
   await page.locator('[data-photo-close]').click();assert.equal((await data()).running,'false');
   console.log('PASS photographed cable light follows actual power and pauses with the model');
-  await visit('parking');await page.locator('.lab-extra details').nth(1).locator('summary').click();
-  await page.locator('[data-handle]').focus();await page.keyboard.press('ArrowLeft');
-  assert.ok(Math.abs(Number((await data()).photoScan)-Number((await data()).handleY)/500)<.002);
-  await page.locator('[data-toggle]').click();await page.locator('[data-photo-zoom]').click();assert.equal((await data()).running,'false');await page.keyboard.press('Escape');
-  console.log('PASS model gestures move the photo scan and original zoom releases held motion');
+  await visit('parking');await page.locator('[data-add="1"]').click();
+  await page.locator('[data-execute]').click();await page.locator('[data-photo-zoom]').click();assert.equal((await data()).running,'false');await page.keyboard.press('Escape');
+  console.log('PASS parking observation and original-photo zoom pause execution');
   for(const [width,height] of [[1920,1080],[1366,768],[390,844],[320,720]]){
     await page.setViewportSize({width,height});
     for(const id of ids){
@@ -85,7 +84,7 @@ let activeBrowser;
     }
   }
   await page.goto(base+'#report');
-  for(const id of ids)assert.match(await page.locator('.report-card').filter({hasText:id==='parking'?'自动泊车训练营':id==='repair'?'汽车故障急救站':id==='charging'?'充电站小站长':'雨天抓地力挑战'}).textContent(),/实物观察与来源/);
+  for(const id of ids)assert.match(await page.locator('.report-card').filter({hasText:id==='parking'?'泊车领航员':id==='repair'?'汽车故障急救站':id==='charging'?'充电站小站长':'雨天抓地力挑战'}).textContent(),/实物观察与来源/);
   const download=page.waitForEvent('download');await page.locator('[data-action="download-report"]').click();const report=await download;await report.saveAs('output/playwright/real-photo-report.html');
   const html=fs.readFileSync('output/playwright/real-photo-report.html','utf8');assert.match(html,/CC BY/);assert.match(html,/照片用于观察形态/);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'report source overflow');
@@ -95,7 +94,7 @@ let activeBrowser;
     const failurePage=await context.newPage();let block=true;
     await failurePage.route(/lab-photos\/.*\.jpg(?:\?t=\d+)?$/,route=>block?route.abort():route.continue());
     await failurePage.goto(base+'#parking');await failurePage.waitForFunction(()=>document.querySelector('#game-host')?.dataset.photoState==='error');
-    assert.equal(await failurePage.locator('[data-photo-zoom]').isDisabled(),true);block=false;await failurePage.locator('[data-photo-retry]').click();
+    assert.equal(await failurePage.locator('[data-photo-zoom]').isDisabled(),true);await failurePage.locator('.parking-extras>details').first().locator(':scope > summary').click();block=false;await failurePage.locator('[data-photo-retry]').click();
     await failurePage.waitForFunction(()=>document.querySelector('#game-host').dataset.photoState==='ready');
     await failurePage.goto(base+'#repair');await failurePage.goto(base+'#grip');await failurePage.waitForFunction(()=>document.querySelector('#game-host').dataset.photoState==='ready'&&document.querySelector('#game-host').dataset.photoId==='tire-tread');
     await failurePage.close();console.log('PASS failed real-photo load retries and scene disposal discards stale images');

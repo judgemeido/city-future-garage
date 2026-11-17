@@ -1,5 +1,5 @@
 export type GameId = import('./game-catalog').CatalogGameId;
-export interface Vehicle { name: string; color: string; battery: number; motor: number; body: string }
+export interface Vehicle { name: string; color: string; battery: number; motor: number; body: string; inverter?: number; reducer?: number; wheels?: string }
 export interface Profile { nickname: string; workstation: string }
 export interface GameProgress { awards: Record<string, { points: number; label: string }>; completed: boolean; data: Record<string, unknown>; image?: string }
 export interface AppState { version: number; profile: Profile; vehicle: Vehicle; progress: Record<GameId, GameProgress>; muted: boolean; reducedMotion: boolean }

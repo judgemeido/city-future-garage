@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_IDS, MAX_SCORE } from '../src/game-catalog.ts';
 import { initialState, loadState, persist, totalScore } from '../src/store.ts';
-import { PARKING_SCENES, planRoute, routePose, isParked, collision, collides, integrateBicycle, MAX_STEER, WHEELBASE } from '../src/games/parking-model.ts';
 import { createCharging, connect, allocate, stepCharging } from '../src/games/charging-model.ts';
 import { createRepair, scanRepair, readPart, replacePart, retestRepair, repairStars, REPAIR_PARTS, REPAIR_SCENES } from '../src/games/repair-model.ts';
 import { createGrip, stepGrip, replayGrip, gripDifference, GRIP_SCENES } from '../src/games/grip-model.ts';
@@ -26,28 +25,7 @@ test('quota fallback preserves structured work and leaves in-memory screenshot e
   let saved;globalThis.localStorage={setItem:(key,value)=>{if(JSON.parse(value).progress.grip.image)throw new Error('Quota');saved=JSON.parse(value);}};
   assert.equal(persist(state),false);assert.ok(state.progress.grip.image);assert.equal(saved.progress.grip.data.report[0].value,'真实实验');
 });
-test('all three reference parking routes obey curvature, geometry and actual parking completion', () => {
-  for(const scene of PARKING_SCENES){const route=planRoute(scene,scene.handle);assert.equal(route.valid,true,scene.name+' '+route.reason);
-    assert.ok(route.maxCurvature<=Math.tan(MAX_STEER)/WHEELBASE);
-    for(const sample of route.samples)assert.equal(collision(sample,scene),false);
-    assert.equal(isParked(routePose(route,route.length),scene),true);
-    assert.equal(isParked(routePose(route,0),scene),false);
-    for(let i=1;i<route.samples.length;i++){const a=route.samples[i-1],b=route.samples[i];if(b.s-a.s<1e-9)continue;const dot=(b.x-a.x)*Math.cos(b.angle)+(b.y-a.y)*Math.sin(b.angle);assert.ok(dot*b.gear>0);}
-  }
-});
-test('route dragging recomputes feasibility and collision checks include rotated car corners', () => {
-  const scene=PARKING_SCENES[0],normal=planRoute(scene,scene.handle),bad=planRoute(scene,{...scene.handle,y:95});
-  assert.notEqual(normal.samples[100].y,bad.samples[100].y);assert.equal(bad.valid,false);assert.ok(bad.conflict);assert.match(bad.reason,/障碍|转向/);
-  assert.equal(collides({x:0,y:0,angle:Math.PI/4},{x:42,y:22,w:15,h:15}),true);
-  assert.equal(isParked({x:scene.bay.x+65,y:scene.bay.y,angle:0},scene),false);
-  assert.equal(isParked({x:scene.bay.x,y:scene.bay.y,angle:.5},scene),false);
-});
-test('bicycle steering has opposite yaw in reverse, cannot move while stopped, and never shifts sideways', () => {
-  const pose={x:100,y:100,angle:0};const forward=integrateBicycle(pose,50,.3,.01),reverse=integrateBicycle(pose,-50,.3,.01);
-  assert.ok(forward.angle>0);assert.ok(reverse.angle<0);assert.ok(forward.x>pose.x);assert.ok(reverse.x<pose.x);
-  assert.deepEqual(integrateBicycle(pose,0,.6,1),pose);
-  assert.deepEqual(integrateBicycle(pose,50,0,.01),{x:100.5,y:100,angle:0});
-});
+// Parking's new planning, geometry and science rules are covered in parking-model.test.mjs.
 test('charging conserves supply, respects vehicle acceptance, and disconnecting stops energy gain', () => {
   const state=createCharging(1);connect(state,0,'a');connect(state,1,'b');allocate(state);
   assert.equal(state.cars[0].power,18);assert.equal(state.cars[1].power,18);

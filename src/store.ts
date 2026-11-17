@@ -5,7 +5,7 @@ export { GAME_IDS } from './game-catalog.ts';
 const emptyProgress = (): GameProgress => ({ awards: {}, completed: false, data: {} });
 export function initialState(): AppState {
   return { version: 1, profile: { nickname: '小工程师', workstation: '01' },
-    vehicle: { name: '我的未来号', color: '#75d1a0', battery: 45, motor: 80, body: 'city' },
+    vehicle: { name: '我的未来号', color: '#75d1a0', battery: 40, motor: 90, body: 'city', inverter: 100, reducer: 9, wheels: 'grip' },
     progress: Object.fromEntries(GAME_IDS.map(id => [id, emptyProgress()])) as Record<GameId, GameProgress>, muted: true, reducedMotion: false };
 }
 const STORAGE_KEY = 'city-future-garage-v1';
