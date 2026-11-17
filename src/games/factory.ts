@@ -1,134 +1,14 @@
-import type { GameAPI, MountedGame, Vehicle } from '../types';
+import { nightBackdrop } from '../theme';
+import type { GameAPI, MountedGame } from '../types';
+import { COLORS, ROADS, SETUPS, PART_NAMES, PART_HINTS, partOptions, batteryOf, inverterOf, motorOf, reducerOf, wheelsOf, bodyOf, normalizeVehicle, fingerprint, configurationCost, configurationStats, operatingPoint, consumptionOf, simulateRoad, round, clamp, type Part, type RouteId, type Trace, type Outcome, type FactoryVehicle as Vehicle } from './factory-model';
+import { parameterDiagram, parameterGroups } from './factory-parameters';
 import { createStage, roundRect, label, downloadFile, escapeHTML } from '../platform';
 import { drawPremiumCar, premiumCarSVG } from '../car-art';
 import { createChallenge, answerEvent, challengeStars, type Challenge } from './factory-challenge';
 import './factory.css';
 
-type Part = 'battery' | 'motor' | 'body';
-type RouteId = 'city' | 'hill' | 'range';
-interface BatterySpec { value: number; title: string; power: number; mass: number; coins: number; hint: string }
-interface MotorSpec { value: number; title: string; torque: number; mass: number; coins: number }
-interface BodySpec { value: string; title: string; mass: number; drag: number; rolling: number; gear: number; coins: number }
-interface Road { id: RouteId; title: string; subtitle: string; distance: number; speed: number; grade: number; payload: number; seconds: number }
-interface Trace { time: number; distance: number; speed: number; energy: number }
-interface Outcome {
-  route: RouteId; routeName: string; vehicle: Vehicle; fingerprint: string;
-  targetDistance: number; distance: number; ratio: number; duration: number;
-  energy: number; remaining: number; peakPower: number; maxSpeed: number;
-  mass: number; rangeEstimate: number; limiting: string; trace: Trace[];
-}
 interface SavedRun extends Omit<Outcome, 'trace'> { timestamp: string; stars?: number; decisions?: Challenge['answers']; mistakes?: number }
 interface Playback { outcome: Outcome; elapsed: number; displaySeconds: number; paused: boolean; finished: boolean; challenge: Challenge; eventPhase: 'question' | 'feedback' | null }
-
-const BATTERIES: BatterySpec[] = [
-  { value: 24, title: '轻巧电池', power: 28, mass: 180, coins: 24, hint: '轻便省预算 · 供电 28 kW' },
-  { value: 40, title: '全能电池', power: 85, mass: 290, coins: 38, hint: '动力搭档 · 供电 85 kW' },
-  { value: 60, title: '长航电池', power: 65, mass: 420, coins: 52, hint: '带更多电 · 供电 65 kW' },
-];
-const MOTORS: MotorSpec[] = [
-  { value: 60, title: '轻巧电机', torque: 140, mass: 70, coins: 20 },
-  { value: 90, title: '全能电机', torque: 210, mass: 90, coins: 28 },
-  { value: 140, title: '劲力电机', torque: 280, mass: 120, coins: 44 },
-];
-const BODIES: BodySpec[] = [
-  { value: 'city', title: '豆豆 · 城市轻巧车', mass: 780, drag: .58, rolling: .012, gear: 8.4, coins: 16 },
-  { value: 'touring', title: '山野 · 旅行跨界车', mass: 940, drag: .69, rolling: .014, gear: 9.2, coins: 22 },
-  { value: 'sport', title: '闪电 · 电动赛车', mass: 850, drag: .52, rolling: .013, gear: 7.6, coins: 24 },
-];
-const ROADS: Road[] = [
-  { id: 'city', title: '校园快递员', subtitle: '100 kg 快递任务 · 安全送达才算酷', distance: 1200, speed: 42, grade: 0, payload: 100, seconds: 14 },
-  { id: 'hill', title: '山顶补给站', subtitle: '18% 教学坡道 · 护送 300 kg 物资', distance: 400, speed: 36, grade: .18, payload: 300, seconds: 16 },
-  { id: 'range', title: '追风远征队', subtitle: '240 km 加速演示 · 把每一度电用好', distance: 240000, speed: 48, grade: 0, payload: 40, seconds: 18 },
-];
-const COLORS = ['#62bd95', '#73aaf1', '#ef9579', '#efc45d', '#a594d6', '#f4f2e9'];
-const clamp = (n: number, min = 0, max = 1) => Math.min(max, Math.max(min, n));
-const round = (n: number, digits = 1) => Number(n.toFixed(digits));
-const batteryOf = (v: Vehicle) => BATTERIES.find(b => b.value === v.battery) ?? BATTERIES[1];
-const motorOf = (v: Vehicle) => MOTORS.find(m => m.value === v.motor) ?? MOTORS[1];
-const bodyOf = (v: Vehicle) => BODIES.find(b => b.value === v.body) ?? BODIES[0];
-const fingerprint = (v: Vehicle) => `${v.battery}-${v.motor}-${v.body}`;
-const configurationCost = (v: Vehicle) => batteryOf(v).coins + motorOf(v).coins + bodyOf(v).coins + 12;
-const consumptionOf = (run: Pick<Outcome, 'distance' | 'energy'>) => run.distance > 1 ? run.energy * 100000 / run.distance : 0;
-
-function normalizeVehicle(input: Partial<Vehicle>): Vehicle {
-  return {
-    name: typeof input.name === 'string' && input.name.trim() ? input.name.trim().slice(0, 16) : '我的小电车',
-    color: typeof input.color === 'string' && /^#[\da-f]{6}$/i.test(input.color) ? input.color : COLORS[0],
-    battery: BATTERIES.some(b => b.value === input.battery) ? input.battery! : 40,
-    motor: MOTORS.some(m => m.value === input.motor) ? input.motor! : 90,
-    body: BODIES.some(b => b.value === input.body) ? input.body! : 'city',
-  };
-}
-
-/** Deterministic teaching model: battery supply -> inverter -> motor -> gear -> wheel.
- * No vehicle manufacturer data is used. Capacity (kWh) and discharge power (kW)
- * are independent fields. Each road starts at 65% SOC for repeatable comparisons.
- */
-function simulateRoad(vehicle: Vehicle, road: Road): Outcome {
-  const battery = batteryOf(vehicle), motor = motorOf(vehicle), body = bodyOf(vehicle);
-  const mass = body.mass + battery.mass + motor.mass + 90 + road.payload;
-  const availableEnergy = battery.value * .65;
-  const targetSpeed = road.speed / 3.6;
-  const deadline = road.distance / targetSpeed * 1.3 + 8;
-  const dt = road.id === 'range' ? 2 : .25;
-  const inverterEfficiency = .95, gearEfficiency = .94, auxiliaryWatts = 700;
-  // A matched inverter, gear and cooling package is supplied, not an invisible bonus.
-  const wheelPowerLimit = Math.min(
-    Math.max(0, battery.power * 1000 - auxiliaryWatts) * inverterEfficiency * .84 * gearEfficiency,
-    100000 * inverterEfficiency * .84 * gearEfficiency,
-    motor.value * 1000 * gearEfficiency,
-  );
-  const torqueForceLimit = motor.torque * body.gear * gearEfficiency / .3;
-  let time = 0, speed = 0, distance = 0, energy = 0, peakPower = 0, maxSpeed = 0, stalled = 0;
-  const trace: Trace[] = [{ time: 0, distance: 0, speed: 0, energy: 0 }];
-  const sampleInterval = Math.max(.5, deadline / 110);
-  let nextSample = sampleInterval;
-  while (time < deadline && distance < road.distance && energy < availableEnergy) {
-    const step = Math.min(dt, deadline - time);
-    const resistance = mass * 9.81 * (body.rolling + road.grade) + .5 * 1.225 * body.drag * speed * speed;
-    const desiredAcceleration = clamp((targetSpeed - speed) * .7, 0, 2.3);
-    const requestedForce = resistance + mass * desiredAcceleration;
-    let force = Math.min(requestedForce, torqueForceLimit, wheelPowerLimit / Math.max(speed, 2));
-    let nextSpeed = clamp(speed + (force - resistance) / mass * step, 0, targetSpeed);
-    // Apply the supply constraint to the step's mean speed, not only its start:
-    // otherwise acceleration could briefly draw more power than the battery allows.
-    for (let iteration = 0; iteration < 3; iteration++) {
-      const predictedMean = (speed + nextSpeed) / 2;
-      force = Math.min(force, wheelPowerLimit / Math.max(predictedMean, .1));
-      nextSpeed = clamp(speed + (force - resistance) / mass * step, 0, targetSpeed);
-    }
-    const meanSpeed = (speed + nextSpeed) / 2;
-    const motorLoad = clamp(force * meanSpeed / gearEfficiency / (motor.value * 1000));
-    const motorEfficiency = .84 + .06 * Math.sqrt(motorLoad);
-    const batteryPower = (force * meanSpeed / gearEfficiency / motorEfficiency / inverterEfficiency + auxiliaryWatts) / 1000;
-    let travel = meanSpeed * step;
-    let used = batteryPower * step / 3600;
-    const portion = Math.min(1,
-      travel > 0 ? (road.distance - distance) / travel : 1,
-      used > 0 ? (availableEnergy - energy) / used : 1,
-    );
-    travel *= portion; used *= portion;
-    time += step * portion; distance += travel; energy += used;
-    speed = nextSpeed; maxSpeed = Math.max(maxSpeed, speed * 3.6);
-    peakPower = Math.max(peakPower, batteryPower);
-    stalled = speed < .08 ? stalled + step : 0;
-    if (time >= nextSample || portion < 1 || stalled > 8) {
-      trace.push({ time, distance, speed: speed * 3.6, energy });
-      nextSample = time + sampleInterval;
-    }
-    if (stalled > 8 || portion < 1) break;
-  }
-  trace.push({ time, distance, speed: speed * 3.6, energy });
-  const usedPerKm = distance > 1 ? energy / (distance / 1000) : 0;
-  return {
-    route: road.id, routeName: road.title, vehicle: { ...vehicle }, fingerprint: fingerprint(vehicle),
-    targetDistance: road.distance, distance, ratio: clamp(distance / road.distance), duration: time,
-    energy, remaining: Math.max(0, availableEnergy - energy), peakPower, maxSpeed, mass,
-    rangeEstimate: usedPerKm > 0 ? availableEnergy / usedPerKm : 0,
-    limiting: battery.power < motor.value ? '电池供电能力' : motor.value < 100 ? '电机输出能力' : '匹配的逆变器上限',
-    trace,
-  };
-}
 
 function sampleOutcome(outcome: Outcome, progress: number): Trace {
   const target = outcome.duration * clamp(progress);
@@ -140,22 +20,6 @@ function sampleOutcome(outcome: Outcome, progress: number): Trace {
     speed: a.speed + (b.speed - a.speed) * mix, energy: a.energy + (b.energy - a.energy) * mix };
 }
 
-function batteryIcon(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, scale = 1) {
-  ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
-  roundRect(ctx, -42, -22, 84, 44, 8, color, '#325f52');
-  roundRect(ctx, 42, -10, 6, 20, 2, '#325f52');
-  ctx.strokeStyle = '#f5fff8'; ctx.lineWidth = 3;
-  for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(-25 + i * 22, -10); ctx.lineTo(-25 + i * 22, 10); ctx.stroke(); }
-  ctx.restore();
-}
-function motorIcon(ctx: CanvasRenderingContext2D, x: number, y: number, scale = 1) {
-  ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
-  roundRect(ctx, -33, -25, 62, 50, 12, '#97bbed', '#48668f');
-  roundRect(ctx, 27, -7, 20, 14, 3, '#48668f');
-  ctx.strokeStyle = '#dbe9ff'; ctx.lineWidth = 3;
-  for (let i = -17; i <= 14; i += 10) { ctx.beginPath(); ctx.moveTo(i, -15); ctx.lineTo(i, 15); ctx.stroke(); }
-  ctx.restore();
-}
 function drawBody(ctx: CanvasRenderingContext2D, x: number, y: number, vehicle: Vehicle, scale = 1, rotation = 0) {
   drawPremiumCar(ctx, x, y, vehicle.color, scale, rotation, vehicle.body);
 }
@@ -181,19 +45,34 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
   });
   runs.forEach(r => best[r.route] = Math.max(best[r.route], clamp(r.ratio)));
   let chosenPart: Part = 'battery';
-  let cutaway = stored.cutaway === true;
   let playback: Playback | null = null;
-  let dragging: { part: Part; x: number; y: number } | null = null;
-  let snap: { part: Part; remaining: number } | null = null;
   let destroyed = false, elapsed = 0;
   let stage: ReturnType<typeof createStage>;
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduceMotion = () => api.reducedMotion();
   let message = runs.length ? '车和试跑记录都在。新任务有三次路况挑战，试着拿到三颗星！' : '选一辆喜欢的车，带它接任务！途中遇到路况时，由你来决定怎么做。';
   let comparison: { previous: SavedRun; current: SavedRun } | null = null;
+  let diagramKey = '';
+  let demoSpeed = 40;
+  const storedWidget = stored.widget as { closed?: unknown; x?: unknown; y?: unknown } | undefined;
+  let widgetClosed = storedWidget?.closed === true;
+  let widgetPosition = { x: typeof storedWidget?.x === 'number' && Number.isFinite(storedWidget.x) ? clamp(storedWidget.x) : 1, y: typeof storedWidget?.y === 'number' && Number.isFinite(storedWidget.y) ? clamp(storedWidget.y) : 0 };
+  let widgetDrag: { id: number; startX: number; startY: number; left: number; top: number; original: { x: number; y: number } } | null = null;
+  let previewCarX = 500, previewCarScale = 3.1;
 
   host.innerHTML = `<div class="experience factory-experience">
     <section class="playfield factory-playfield">
-      <div class="factory-stage"><div class="factory-view-toggle" role="group" aria-label="汽车展示方式"><button type="button" data-view="exterior">完整车身</button><button type="button" data-view="cutaway">查看动力底盘</button></div></div>
+      <div class="factory-stage">
+        <section class="factory-widget" aria-label="整车数据浮动面板">
+          <header class="factory-widget-header"><button type="button" class="factory-widget-handle" aria-label="移动整车数据面板：拖拽或使用方向键，Home回到右上角" title="拖动标题移动，方向键也可移动"><span aria-hidden="true">⠿</span> 整车数据</button><button type="button" class="factory-widget-close" aria-label="关闭整车数据面板" title="关闭">×</button></header>
+          <div class="factory-widget-body">
+            <div class="factory-config-summary" aria-label="当前配置摘要"></div>
+            <div class="factory-stamp"><span class="factory-stamp-symbol">✦</span><span class="factory-stamp-text"></span></div>
+            <details class="factory-widget-more"><summary>匹配提示与积分说明</summary><p class="factory-matching" role="status" aria-live="polite"></p><p class="factory-score-help">保存车辆20，爬坡体验20，续航体验20；三条路各按最佳完成比例加0—10；换部件、同条件重测加10。同一件事只取最高分，低分也可体验全部内容。</p></details>
+          </div>
+          <footer class="factory-widget-footer"><div class="factory-save-row"><button type="button" class="btn btn-primary factory-save">保存我的车 <span>＋20</span></button><button type="button" class="btn factory-poster" aria-label="下载我的汽车海报">海报 ↓</button></div></footer>
+        </section>
+        <button type="button" class="factory-widget-open" hidden aria-label="重新打开整车数据面板">显示车辆数据</button>
+      </div>
       <div class="factory-mission-progress" hidden aria-label="本次任务进度"></div>
       <section class="factory-event" hidden aria-labelledby="factory-event-title">
         <div class="factory-event-top"><span class="factory-event-number"></span><span>小车已停稳，想好了再选</span></div>
@@ -218,13 +97,19 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
       <div class="factory-panel-heading"><span class="factory-step">01</span><div><span class="factory-eyebrow">YOUR OWN EV</span><h3>我的造车工位</h3></div></div>
       <label class="factory-name-label" for="factory-name">给它起个名字<input id="factory-name" class="factory-name" maxlength="16" value="${escapeHTML(vehicle.name)}" autocomplete="off"></label>
       <div class="factory-colors" aria-label="车身颜色">${COLORS.map(c => `<button type="button" class="factory-color" data-color="${c}" style="--swatch:${c}" aria-label="选择${c}车身颜色" aria-pressed="${vehicle.color === c}"></button>`).join('')}<label class="factory-custom-color" title="自选颜色"><input type="color" aria-label="自选车身颜色" value="${vehicle.color}"><span>＋</span></label></div>
-      <div class="factory-part-tabs" role="group" aria-label="选择装配部件"><button type="button" data-part="battery">电池</button><button type="button" data-part="motor">电机</button><button type="button" data-part="body">车身</button></div>
+      <p class="factory-assembly-intro">六大部件自由搭配，看看整条动力链如何合作。</p>
+      <div class="factory-setups" role="group" aria-label="一键参考配置">${SETUPS.map(setup => `<button type="button" data-setup="${setup.id}">${setup.title}</button>`).join('')}</div>
+      <div class="factory-part-tabs" role="group" aria-label="选择装配部件">${Object.entries(PART_NAMES).map(([part, title]) => `<button type="button" data-part="${part}">${title}</button>`).join('')}</div>
       <div class="factory-options"></div>
       <div class="factory-part-detail"></div>
-      <div class="factory-save-row"><button type="button" class="btn btn-primary factory-save">保存我的车 <span>＋20</span></button><button type="button" class="btn factory-poster" aria-label="下载我的汽车海报">海报 ↓</button></div>
-      <div class="factory-stamp"><span class="factory-stamp-symbol">✦</span><span class="factory-stamp-text"></span></div>
-      <details class="factory-score-help"><summary>积分怎么获得？</summary><p>保存车辆20，爬坡体验20，续航体验20；三条路各按最佳完成比例加0—10；换部件、同条件重测加10。同一件事只取最高分，低分也能玩全部内容。</p></details>
     </aside>
+    <section class="factory-parameters" aria-labelledby="factory-parameters-title">
+      <div class="factory-parameters-heading"><div><span class="factory-eyebrow">EV ENGINEERING / BUILD SHEET</span><h3 id="factory-parameters-title">我的整车 · 完整参数图</h3><p>点图中的部件可选装。图、试跑、保存和导出使用同一套参数。</p></div><div class="factory-parameter-actions"><button type="button" class="btn" data-export-parameters="png">下载参数图 PNG ↓</button><button type="button" class="btn" data-export-parameters="svg">矢量图 SVG ↓</button></div></div>
+      <div class="factory-parameter-scroll" tabindex="0" aria-label="完整参数图，可横向滚动"><div class="factory-parameter-diagram"></div></div>
+      <p class="factory-scroll-hint">小屏可横向滑动查看；下载图片可放大阅读。</p>
+      <div class="factory-speed-lab"><div><h4>试着转一转：车速和转速</h4><p>稳态运动示意；不消耗试跑电量。</p></div><label for="factory-demo-speed">示意车速 <output id="factory-demo-speed-value">40 km/h</output><input id="factory-demo-speed" type="range" min="0" max="80" step="1" value="40"></label><div class="factory-speed-readings" aria-live="polite"></div></div>
+      <details class="factory-parameter-lessons"><summary>怎么读这些参数？展开六个部件的说明</summary><div>${Object.entries(PART_HINTS).map(([part, hint]) => `<article><h4>${PART_NAMES[part as Part]}</h4><p>${hint}</p></article>`).join('')}</div><p>保守轮端功率上限按电机效率84%计算；实际效率随负载在84–90%间变化。前驱轴承担55%法向载荷，抓地也限制驱动力。规格用于教学比较，不是任何品牌的实车数据。</p></details>
+    </section>
   </div>`;
 
   const get = <T extends HTMLElement = HTMLElement>(selector: string): T => {
@@ -234,19 +119,101 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
   };
   const nameInput = get<HTMLInputElement>('.factory-name');
   const stageHost = get('.factory-stage');
+  const widget = get('.factory-widget');
+  const widgetHandle = get<HTMLButtonElement>('.factory-widget-handle');
   const feedback = (text: string) => { message = text; get('.factory-message-text').textContent = text; };
+
+  function widgetBounds() {
+    const margin = 10;
+    return { margin, x: Math.max(0, stageHost.clientWidth - widget.offsetWidth - margin * 2), y: Math.max(0, stageHost.clientHeight - widget.offsetHeight - margin * 2) };
+  }
+  function positionWidget() {
+    if (destroyed) return;
+    widget.hidden = widgetClosed || !!playback;
+    get('.factory-widget-open').hidden = !widgetClosed || !!playback;
+    if (widget.hidden) { previewCarX = 500; previewCarScale = 3.1; return; }
+    const bounds = widgetBounds();
+    widget.style.left = `${bounds.margin + bounds.x * widgetPosition.x}px`;
+    widget.style.top = `${bounds.margin + bounds.y * widgetPosition.y}px`;
+    const width = stageHost.clientWidth || 1000;
+    const available = Math.max(60, width - widget.offsetWidth - 28);
+    previewCarX = (available / 2 + 10) / width * 1000;
+    previewCarScale = clamp((available - 12) / width * 1000 / 180, 1.2, 3.1);
+  }
+  function setWidgetClosed(closed: boolean) {
+    finishWidgetDrag(true);
+    widgetClosed = closed; positionWidget(); persist();
+    (closed ? get<HTMLButtonElement>('.factory-widget-open') : widgetHandle).focus({ preventScroll: true });
+  }
+  function finishWidgetDrag(cancel = false) {
+    if (!widgetDrag) return;
+    const drag = widgetDrag; widgetDrag = null;
+    if (cancel) widgetPosition = drag.original;
+    widget.classList.remove('is-dragging');
+    if (widgetHandle.hasPointerCapture(drag.id)) widgetHandle.releasePointerCapture(drag.id);
+    positionWidget(); if (!cancel) persist();
+  }
+  const onWidgetPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0 || widgetDrag || widget.hidden) return;
+    const bounds = widgetBounds();
+    widgetDrag = { id: event.pointerId, startX: event.clientX, startY: event.clientY, left: bounds.margin + bounds.x * widgetPosition.x, top: bounds.margin + bounds.y * widgetPosition.y, original: { ...widgetPosition } };
+    widgetHandle.setPointerCapture(event.pointerId); widgetHandle.focus({ preventScroll: true });
+    widget.classList.add('is-dragging'); event.preventDefault();
+  };
+  const onWidgetPointerMove = (event: PointerEvent) => {
+    if (!widgetDrag || event.pointerId !== widgetDrag.id) return;
+    const bounds = widgetBounds();
+    widgetPosition = { x: bounds.x ? clamp((widgetDrag.left + event.clientX - widgetDrag.startX - bounds.margin) / bounds.x) : 0, y: bounds.y ? clamp((widgetDrag.top + event.clientY - widgetDrag.startY - bounds.margin) / bounds.y) : 0 };
+    positionWidget(); event.preventDefault();
+  };
+  const onWidgetPointerUp = (event: PointerEvent) => { if (widgetDrag?.id === event.pointerId) finishWidgetDrag(); };
+  const onWidgetPointerCancel = () => finishWidgetDrag(true);
+  const onWidgetBlur = () => finishWidgetDrag(true);
+  widgetHandle.addEventListener('pointerdown', onWidgetPointerDown);
+  widgetHandle.addEventListener('pointermove', onWidgetPointerMove);
+  widgetHandle.addEventListener('pointerup', onWidgetPointerUp);
+  widgetHandle.addEventListener('pointercancel', onWidgetPointerCancel);
+  widgetHandle.addEventListener('lostpointercapture', onWidgetPointerCancel);
+  window.addEventListener('blur', onWidgetBlur);
+  const widgetObserver = new ResizeObserver(positionWidget);
+  widgetObserver.observe(stageHost); widgetObserver.observe(widget);
+
+  function updateSpeedLab() {
+    const speedLimit = Math.floor(Math.min(80, configurationStats(vehicle).speedCeiling));
+    demoSpeed = clamp(demoSpeed, 0, speedLimit);
+    const slider = get<HTMLInputElement>('#factory-demo-speed'); slider.max = String(speedLimit); slider.value = String(demoSpeed);
+    const point = operatingPoint(vehicle, demoSpeed);
+    get('#factory-demo-speed-value').textContent = `${demoSpeed} km/h`;
+    get('.factory-speed-readings').innerHTML = `<span><small>车轮转速</small><strong>${round(point.wheelRPM)} <small>r/min</small></strong></span><span><small>电机转速</small><strong>${round(point.motorRPM)} <small>r/min</small></strong></span><p>${demoSpeed === 0 ? '车已停稳，转速为0。' : `车轮每转1圈，电机转${vehicle.reducer}圈。`} 大传动比或小轮径会让同车速的电机转得更快。</p>`;
+  }
+
+  async function exportParameters(format: string) {
+    const title = `${vehicle.name.replace(/[\\/:*?"<>|]/g, '') || '我的汽车'}-完整参数图`;
+    const svg = parameterDiagram(vehicle);
+    if (format === 'svg') { downloadFile(`${title}.svg`, svg, 'image/svg+xml;charset=utf-8'); api.notify('完整参数矢量图已下载，可放大或打印。'); return; }
+    try {
+      const img = new Image(); img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`; await img.decode();
+      const canvas = document.createElement('canvas'); canvas.width = 2400; canvas.height = 2100;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('PNG encode failed');
+      downloadFile(`${title}.png`, blob, 'image/png'); api.notify('完整参数图已下载，包含六大部件和计算关系。');
+    } catch { api.notify('参数图片暂时无法生成，请使用矢量图 SVG 下载。'); }
+  }
 
   function persist() {
     const latest = runs[runs.length - 1];
-    const battery = batteryOf(vehicle), motor = motorOf(vehicle), body = bodyOf(vehicle);
+    const battery = batteryOf(vehicle);
     api.record('factory', {
-      configuration: { ...vehicle }, saved, compared, cutaway, runs: runs.slice(-24), best: { ...best }, stars: { ...stars }, attempts: { ...attempts },
+      configuration: { ...vehicle }, saved, compared, widget: { closed: widgetClosed, ...widgetPosition }, runs: runs.slice(-24), best: { ...best }, stars: { ...stars }, attempts: { ...attempts },
       summary: comparison ? `我在${comparison.current.routeName}换了部件：每100 km折算用电从${round(consumptionOf(comparison.previous), 2)}变为${round(consumptionOf(comparison.current), 2)} kWh，要结合行驶完成比例看。`
         : latest ? `我的${vehicle.name}在${latest.routeName}跑了${round(latest.distance / 1000, 2)} km，发现容量和供电能力是两回事。` : '我装配了自己的新能源小车，准备带它上路。',
       report: [
         { label: '我的汽车', value: vehicle.name },
         { label: '电池容量 / 最大供电', value: `${battery.value} kWh / ${battery.power} kW` },
-        { label: '电机 / 车身', value: `${motor.value} kW / ${body.title}` },
+        ...parameterGroups(vehicle).map(group => ({ label: `${PART_NAMES[group.part]} · ${group.title}`, value: group.rows.map(([label, value]) => `${label} ${value}`).join('；') })),
+        { label: '整备质量 / 工程预算', value: `${configurationStats(vehicle).emptyMass} kg / ${configurationCost(vehicle)} 币` },
+        { label: '保守轮端功率 / 低速扭矩上限', value: `${round(configurationStats(vehicle).wheelPower)} kW / ${round(configurationStats(vehicle).wheelTorque)} N·m；驱动力还受抓地限制` },
         { label: '动力链', value: '电池 → 逆变器 → 电机 → 减速器 → 车轮' },
         { label: '校园 / 爬坡 / 长途最佳比例', value: `${round(best.city * 100)}% / ${round(best.hill * 100)}% / ${round(best.range * 100)}%` },
         { label: '任务最佳星级', value: `校园 ${stars.city}/3 · 山顶 ${stars.hill}/3 · 远征 ${stars.range}/3` },
@@ -264,11 +231,6 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
   function updateControls() {
     if (destroyed) return;
     get('.factory-message-text').textContent = message;
-    host.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => {
-      const active = button.dataset.view === (cutaway ? 'cutaway' : 'exterior');
-      button.setAttribute('aria-pressed', String(active));
-    });
-    get('.factory-view-toggle').hidden = !!playback;
     host.querySelectorAll<HTMLButtonElement>('[data-part]').forEach(button => {
       const selected = button.dataset.part === chosenPart;
       button.setAttribute('aria-pressed', String(selected));
@@ -277,12 +239,16 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     host.querySelectorAll<HTMLButtonElement>('[data-color]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.color === vehicle.color)));
     const customColor = get<HTMLInputElement>('.factory-custom-color input');
     if (document.activeElement !== customColor) customColor.value = vehicle.color;
-    const options = chosenPart === 'battery' ? BATTERIES.map(b => ({ value: b.value, title: b.title, detail: `${b.value} kWh · ${b.power} kW`, coins: b.coins }))
-      : chosenPart === 'motor' ? MOTORS.map(m => ({ value: m.value, title: m.title, detail: `${m.value} kW · ${m.torque} N·m`, coins: m.coins }))
-        : BODIES.map(b => ({ value: b.value, title: b.title, detail: `${b.mass} kg · ${b.value === 'city' ? '圆润短车身' : b.value === 'touring' ? '高车顶，宽敞座舱' : '开放座舱，宽大尾翼'}`, coins: b.coins }));
+    const options = partOptions(chosenPart);
     get('.factory-options').innerHTML = options.map(o => `<button type="button" class="factory-option ${String(vehicle[chosenPart]) === String(o.value) ? 'is-selected' : ''}" data-option="${o.value}" aria-pressed="${String(vehicle[chosenPart]) === String(o.value)}">${chosenPart === 'body' ? `<span class="factory-body-preview" aria-hidden="true">${premiumCarSVG(vehicle.color, String(o.value))}</span>` : `<span class="factory-option-check">${String(vehicle[chosenPart]) === String(o.value) ? '✓' : '○'}</span>`}<span><strong>${o.title}</strong><small>${o.detail}</small></span><span class="factory-option-coins">${o.coins}<small>币</small></span></button>`).join('');
-    get('.factory-part-detail').textContent = chosenPart === 'battery' ? 'kWh 是装多少电；kW 是供电有多快。长航电池容量更大，也更重。'
-      : chosenPart === 'motor' ? '大电机需要电池供得上电。换大电机，也要看整条动力链。' : '轻车体减少负担；减速器传动比、车体阻力也会影响路测。';
+    get('.factory-part-detail').textContent = PART_HINTS[chosenPart];
+    const stats = configurationStats(vehicle);
+    get('.factory-config-summary').innerHTML = `<span><small>工程预算</small><strong>${stats.cost} 币</strong></span><span><small>整备质量</small><strong>${stats.emptyMass} kg</strong></span><span><small>保守轮端功率</small><strong>${round(stats.wheelPower)} kW</strong></span><span><small>轮端扭矩上限</small><strong>${round(stats.wheelTorque)} N·m</strong></span>`;
+    get('.factory-matching').textContent = `匹配提示：当前保守功率上限主要受${stats.limiting}限制。${chosenPart === 'reducer' ? '大传动比增加低速扭矩，也降低转速对应的车速。' : chosenPart === 'wheels' ? '轮径、滚阻与抓地各有取舍，试跑比较更直观。' : '换大电机前，先看电池和逆变器能否供得上。'}`;
+    const nextDiagramKey = `${fingerprint(vehicle)}:${vehicle.name}:${vehicle.color}`;
+    if (nextDiagramKey !== diagramKey) { get('.factory-parameter-diagram').innerHTML = parameterDiagram(vehicle, true); diagramKey = nextDiagramKey; }
+    host.querySelectorAll<SVGElement>('[data-diagram-part]').forEach(node => { node.setAttribute('aria-pressed', String(node.dataset.diagramPart === chosenPart)); node.setAttribute('aria-disabled', String(!!playback && !playback.finished)); });
+    updateSpeedLab();
     host.querySelectorAll<HTMLButtonElement>('[data-route]').forEach(button => {
       button.classList.toggle('is-selected', playback?.outcome.route === button.dataset.route);
       button.title = ROADS.find(r => r.id === button.dataset.route)?.subtitle ?? '';
@@ -302,7 +268,8 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     get('.factory-stamp-text').textContent = saved && runs.length ? '新能源造车体验章已点亮' : saved ? '车已保存，试跑一次就点亮体验章' : '保存＋试跑，领取我的造车体验章';
     get('.factory-stamp').classList.toggle('is-earned', saved && runs.length > 0);
     get<HTMLButtonElement>('.factory-save').innerHTML = saved ? '更新我的车 <span>已记录</span>' : '保存我的车 <span>＋20</span>';
-    host.querySelectorAll<HTMLInputElement | HTMLButtonElement>('.factory-controls input, .factory-controls button').forEach(control => control.disabled = !!playback && !playback.finished);
+    host.querySelectorAll<HTMLInputElement | HTMLButtonElement>('.factory-controls input, .factory-controls button, .factory-widget .factory-save, .factory-widget .factory-poster').forEach(control => control.disabled = !!playback && !playback.finished);
+    positionWidget();
   }
 
   function displayResult(current: SavedRun) {
@@ -325,7 +292,7 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     const { trace: _trace, ...outcome } = playback.outcome;
     const current: SavedRun = { ...outcome, timestamp: new Date().toISOString(), stars: challengeStars(playback.challenge, outcome.ratio), decisions: playback.challenge.answers, mistakes: playback.challenge.mistakes };
     stars[current.route] = Math.max(stars[current.route], current.stars!);
-    const previous = [...runs].reverse().find(r => r.route === current.route && r.fingerprint !== current.fingerprint);
+    const previous = [...runs].reverse().find(r => r.route === current.route && typeof r.fingerprint === 'string' && r.fingerprint.startsWith('powertrain-v2:') && r.fingerprint !== current.fingerprint);
     comparison = previous ? { previous, current } : null;
     runs.push(current); if (runs.length > 24) runs.shift();
     best[current.route] = Math.max(best[current.route], current.ratio);
@@ -343,10 +310,10 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
 
   function startRoad(routeId: RouteId) {
     vehicle.name = nameInput.value.trim().slice(0, 16) || '我的小电车';
-    dragging = null; comparison = null;
+    comparison = null;
     const road = ROADS.find(r => r.id === routeId)!;
     const challenge = createChallenge(routeId, attempts[routeId]++);
-    playback = { outcome: simulateRoad(vehicle, road), elapsed: 0, displaySeconds: reduceMotion ? 8 : road.seconds, paused: false, finished: false, challenge, eventPhase: null };
+    playback = { outcome: simulateRoad(vehicle, road), elapsed: 0, displaySeconds: reduceMotion() ? 8 : road.seconds, paused: false, finished: false, challenge, eventPhase: null };
     get('.factory-result').hidden = true;
     feedback(`${road.title}出发！途中有三次选择，答错可以重试；跑完全程且三次首选正确就能拿到三星。`);
     persist();
@@ -395,10 +362,13 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
   function changePart(part: Part, value: string) {
     if (part === 'battery') vehicle.battery = Number(value);
     else if (part === 'motor') vehicle.motor = Number(value);
+    else if (part === 'inverter') vehicle.inverter = Number(value);
+    else if (part === 'reducer') vehicle.reducer = Number(value);
+    else if (part === 'wheels') vehicle.wheels = value;
     else vehicle.body = value;
-    playback = null; dragging = null; snap = { part, remaining: .7 };
+    playback = null;
     get('.factory-result').hidden = true;
-    feedback(`${part === 'battery' ? batteryOf(vehicle).title : part === 'motor' ? motorOf(vehicle).title : bodyOf(vehicle).title}已装上！可以拖动部件玩装配，也可以马上试跑。`);
+    feedback(`${partOptions(part).find(p => String(p.value) === value)?.title ?? PART_NAMES[part]}已装上！参数图已更新，试跑看看有什么变化。`);
     persist(); updateControls();
   }
 
@@ -406,30 +376,29 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     const canvas = document.createElement('canvas'); canvas.width = 2000; canvas.height = 2400;
     const ctx = canvas.getContext('2d')!;
     ctx.scale(2, 2);
-    const bg = ctx.createLinearGradient(0, 0, 1000, 1200); bg.addColorStop(0, '#eef6ee'); bg.addColorStop(1, '#fff6e7');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, 1000, 1200);
-    label(ctx, 'MY FIRST ELECTRIC CAR', 78, 104, 20, '#648675', 600);
-    label(ctx, vehicle.name, 78, 184, 50, '#244839', 700);
-    label(ctx, `${api.getProfile().nickname || '小工程师'}的新能源造车作品`, 80, 227, 24, '#5f796a');
-    roundRect(ctx, 70, 294, 860, 394, 32, '#fffdf5', '#d3e2d3');
-    ctx.fillStyle = '#dbead7'; ctx.beginPath(); ctx.ellipse(500, 674, 275, 15, 0, 0, Math.PI * 2); ctx.fill();
+    nightBackdrop(ctx, 1000, 1200);
+    label(ctx, 'MY FIRST ELECTRIC CAR', 78, 104, 20, '#a6bad0', 600);
+    label(ctx, vehicle.name, 78, 184, 50, '#e8f3ff', 700);
+    label(ctx, `${api.getProfile().nickname || '小工程师'}的新能源造车作品`, 80, 227, 24, '#a6bad0');
+    roundRect(ctx, 70, 294, 860, 394, 32, '#111c32', '#3e5476');
+    ctx.fillStyle = '#47eaff22'; ctx.beginPath(); ctx.ellipse(500, 674, 275, 15, 0, 0, Math.PI * 2); ctx.fill();
     drawBody(ctx, 500, 590, vehicle, 2.5);
-    const battery = batteryOf(vehicle), motor = motorOf(vehicle);
-    label(ctx, `${bodyOf(vehicle).title} · ${configurationCost(vehicle)} 工程币`, 111, 342, 20, '#496e58');
-    for (const [i, pair] of [['电池容量', `${battery.value} kWh`], ['最大供电', `${battery.power} kW`], ['电机输出', `${motor.value} kW`]].entries()) {
-      const x = 85 + i * 305;
-      label(ctx, pair[0], x, 771, 21, '#6b8072'); label(ctx, pair[1], x, 823, 38, '#244839', 700);
+    const battery = batteryOf(vehicle), motor = motorOf(vehicle), inverter = inverterOf(vehicle), reducer = reducerOf(vehicle), wheels = wheelsOf(vehicle);
+    label(ctx, `${bodyOf(vehicle).title} · ${configurationCost(vehicle)} 工程币`, 111, 342, 20, '#e8f3ff');
+    for (const [i, pair] of [['电池容量 / 供电', `${battery.value} kWh / ${battery.power} kW`], ['逆变器输入 / 效率', `${inverter.value} kW / ${round(inverter.efficiency * 100)}%`], ['电机功率 / 扭矩', `${motor.value} kW / ${motor.torque} N·m`], ['减速器 / 效率', `${reducer.value}∶1 / ${round(reducer.efficiency * 100)}%`], ['车轮 / 有效半径', `${wheels.size} / ${wheels.radius} m`], ['整备质量', `${configurationStats(vehicle).emptyMass} kg`]].entries()) {
+      const x = 85 + i % 3 * 305, y = 737 + Math.floor(i / 3) * 85;
+      label(ctx, pair[0], x, y, 17, '#a6bad0'); label(ctx, pair[1], x, y + 35, 21, '#e8f3ff', 700);
     }
-    label(ctx, '电池 → 逆变器 → 电机 → 减速器 → 车轮', 85, 933, 25, '#42604f');
+    label(ctx, '电池 → 逆变器 → 电机 → 减速器 → 车轮', 85, 933, 25, '#e8f3ff');
     const matchingRuns = runs.filter(run => run.fingerprint === fingerprint(vehicle));
     const routeMarks = ROADS.map(road => {
       const routeRuns = matchingRuns.filter(run => run.route === road.id);
       return `${road.id === 'city' ? '校园' : road.id === 'hill' ? '爬坡' : '远方'} ${routeRuns.length ? `${round(Math.max(...routeRuns.map(run => run.ratio)) * 100)}%` : '未试跑'}`;
     });
-    label(ctx, '这套配置的路测记录', 85, 978, 20, '#6b8072');
-    label(ctx, routeMarks.join('    '), 85, 1021, 23, '#42604f');
-    label(ctx, '我装配，我试跑，我发现。', 85, 1083, 28, '#dc866b', 600);
-    label(ctx, '合成教学参数与加速展示，不代表实车性能。', 85, 1147, 18, '#7b8c7d');
+    label(ctx, '这套配置的路测记录', 85, 978, 20, '#a6bad0');
+    label(ctx, routeMarks.join('    '), 85, 1021, 23, '#e8f3ff');
+    label(ctx, '我装配，我试跑，我发现。', 85, 1083, 28, '#f5bc65', 600);
+    label(ctx, '合成教学参数与加速展示，不代表实车性能。', 85, 1147, 18, '#a6bad0');
     return canvas.toDataURL('image/png');
   }
 
@@ -444,9 +413,14 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
   }
 
   const onClick = (event: MouseEvent) => {
+    const diagramPart = (event.target as Element).closest<SVGElement>('[data-diagram-part]');
+    if (diagramPart && !(playback && !playback.finished)) { chosenPart = diagramPart.dataset.diagramPart as Part; updateControls(); get('.factory-options').scrollIntoView({ block: 'nearest', behavior: 'instant' }); return; }
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button');
-    if (!button || !host.contains(button)) return;
-    if (button.dataset.decision !== undefined) chooseAction(Number(button.dataset.decision));
+    if (!button || !host.contains(button) || button.disabled) return;
+    if (button.classList.contains('factory-widget-close')) setWidgetClosed(true);
+    else if (button.classList.contains('factory-widget-open')) setWidgetClosed(false);
+    else if (button.dataset.exportParameters) void exportParameters(button.dataset.exportParameters);
+    else if (button.dataset.decision !== undefined) chooseAction(Number(button.dataset.decision));
     else if (button.classList.contains('factory-event-continue') && playback?.eventPhase === 'feedback') {
       playback.eventPhase = null;
       feedback(`判断完成 ${playback.challenge.index}/3，继续出发！`); updateControls();
@@ -454,8 +428,11 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     }
     else if (button.classList.contains('factory-retry') && playback?.finished) startRoad(playback.outcome.route);
     else if (button.classList.contains('factory-next') && playback?.finished) startRoad(ROADS[(ROADS.findIndex(r => r.id === playback!.outcome.route) + 1) % ROADS.length].id);
-    else if (button.dataset.view) { cutaway = button.dataset.view === 'cutaway'; persist(); updateControls(); }
     else if (button.dataset.part) { chosenPart = button.dataset.part as Part; updateControls(); }
+    else if (button.dataset.setup) {
+      const setup = SETUPS.find(p => p.id === button.dataset.setup);
+      if (setup) { vehicle = { ...vehicle, ...setup.parts }; playback = null; get('.factory-result').hidden = true; persist(); updateControls(); feedback(`${setup.title}已装配。${setup.hint}`); }
+    }
     else if (button.dataset.option) changePart(chosenPart, button.dataset.option);
     else if (button.dataset.color) { vehicle.color = button.dataset.color; persist(); updateControls(); }
     else if (button.dataset.route) startRoad(button.dataset.route as RouteId);
@@ -472,126 +449,66 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
   };
   const onInput = (event: Event) => {
     const target = event.target as HTMLInputElement;
-    if (target === nameInput) { vehicle.name = target.value.slice(0, 16); }
+    if (target === nameInput) { vehicle.name = target.value.slice(0, 16); updateControls(); }
     else if (target.matches('.factory-custom-color input')) { vehicle.color = target.value; updateControls(); }
+    else if (target.id === 'factory-demo-speed') { demoSpeed = Number(target.value); updateSpeedLab(); }
+  };
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.target === widgetHandle && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) {
+      event.preventDefault(); finishWidgetDrag(true);
+      const bounds = widgetBounds(), step = event.shiftKey ? 40 : 16;
+      if (event.key === 'Home') widgetPosition = { x: 1, y: 0 };
+      else widgetPosition = { x: clamp(widgetPosition.x + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0) / Math.max(1, bounds.x)), y: clamp(widgetPosition.y + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0) / Math.max(1, bounds.y)) };
+      positionWidget(); persist(); return;
+    }
+    if (event.key === 'Escape' && widget.contains(event.target as Node)) { event.preventDefault(); if (widgetDrag) finishWidgetDrag(true); else setWidgetClosed(true); return; }
+    const part = (event.target as Element).closest<SVGElement>('[data-diagram-part]');
+    if (part && (event.key === 'Enter' || event.key === ' ') && !(playback && !playback.finished)) { event.preventDefault(); chosenPart = part.dataset.diagramPart as Part; updateControls(); get('.factory-options').scrollIntoView({ block: 'nearest', behavior: 'instant' }); }
   };
   const onChange = () => persist();
   const onVisibility = () => { if (document.hidden && playback && !playback.finished && !playback.eventPhase) { playback.paused = true; updateControls(); } };
-  const onPointerLeave = () => { if (dragging) { dragging = null; feedback('部件回到工位了。可以再拖一次，也可以直接点配方。'); } };
   host.addEventListener('click', onClick); host.addEventListener('input', onInput); host.addEventListener('change', onChange);
+  host.addEventListener('keydown', onKeyDown);
   document.addEventListener('visibilitychange', onVisibility);
-  stageHost.addEventListener('pointerleave', onPointerLeave);
 
   function drawChain(ctx: CanvasRenderingContext2D, y: number, running: boolean) {
     const names = ['电池', '逆变器', '电机', '减速器', '车轮'];
     const xs = [280, 390, 500, 610, 720];
-    ctx.strokeStyle = '#b8cbb8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(xs[4], y); ctx.stroke();
+    ctx.strokeStyle = '#406381'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(xs[0], y); ctx.lineTo(xs[4], y); ctx.stroke();
     xs.forEach((x, i) => {
-      roundRect(ctx, x - 40, y - 17, 80, 34, 17, i === 0 ? '#d0ead8' : i === 2 ? '#d9e5f7' : '#edf1e5', '#bccdbd');
-      label(ctx, names[i], x - (names[i].length * 7), y + 5, 14, '#446554');
+      roundRect(ctx, x - 40, y - 17, 80, 34, 17, i === 0 ? '#174643' : i === 2 ? '#253456' : '#18263e', '#476786');
+      label(ctx, names[i], x - (names[i].length * 7), y + 5, 14, '#e8f3ff');
     });
-    const dotX = xs[0] + (reduceMotion ? .45 : (elapsed * (running ? .5 : .2)) % 1) * (xs[4] - xs[0]);
-    ctx.beginPath(); ctx.arc(dotX, y + 22, 4, 0, Math.PI * 2); ctx.fillStyle = '#dfa165'; ctx.fill();
+    const dotX = xs[0] + (reduceMotion() ? .45 : running ? (elapsed * .5) % 1 : 0) * (xs[4] - xs[0]);
+    ctx.beginPath(); ctx.arc(dotX, y + 22, 4, 0, Math.PI * 2); ctx.fillStyle = '#f5bc65'; ctx.fill();
   }
 
   function drawWorkshop(ctx: CanvasRenderingContext2D) {
-    const bg = ctx.createLinearGradient(0, 0, 0, 520); bg.addColorStop(0, '#f4f6e9'); bg.addColorStop(.67, '#eef0df'); bg.addColorStop(1, '#dae4d4');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, 1000, 520);
-    // Architectural windows and a little assembly robot keep the scene a workshop.
-    for (let i = 0; i < 6; i++) {
-      roundRect(ctx, 72 + i * 158, 159, 132, 94, 9, '#e0ece2', '#c8d8cb');
-      ctx.strokeStyle = '#c8d8cb'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(138 + i * 158, 160); ctx.lineTo(138 + i * 158, 251); ctx.stroke();
-    }
-    ctx.fillStyle = '#cfdccc'; ctx.fillRect(0, 363, 1000, 3);
-    ctx.strokeStyle = '#c9d8c4'; ctx.lineWidth = 1;
-    for (let x = -100; x < 1100; x += 120) { ctx.beginPath(); ctx.moveTo(500 + (x - 500) * .4, 365); ctx.lineTo(x, 520); ctx.stroke(); }
-    label(ctx, 'NEW ENERGY WORKSHOP', 43, 43, 13, '#7f947e', 600);
-    label(ctx, '让你的想法，开上路。', 43, 79, 27, '#2e4f3c', 600);
-    roundRect(ctx, 792, 88, 163, 50, 14, '#fffdf4', '#d7e0cc');
-    label(ctx, '我的配置', 808, 108, 12, '#778a76'); label(ctx, `${configurationCost(vehicle)} 工程币`, 808, 128, 18, '#49654c', 600);
-    drawChain(ctx, 103, false);
-    // Assembly station and hanging robotic tools.
-    ctx.strokeStyle = '#b4c9b5'; ctx.lineWidth = 12; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(186, 184); ctx.lineTo(221, 227); ctx.lineTo(195, 275); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(835, 184); ctx.lineTo(797, 227); ctx.lineTo(817, 275); ctx.stroke();
-    for (const [x, y] of [[186, 184], [221, 227], [835, 184], [797, 227]]) { ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fillStyle = '#789d83'; ctx.fill(); }
-    ctx.lineWidth = 1;
-    roundRect(ctx, 214, 387, 597, 18, 8, '#d3dfcc', '#b4cbb6');
-    drawBody(ctx, 503, 310, vehicle, 2.45);
-    roundRect(ctx, 43, 149, 191, 31, 12, '#fffdf4', '#cad8c4');
-    label(ctx, vehicle.name.length > 11 ? `${vehicle.name.slice(0, 11)}…` : vehicle.name || '我的小电车', 58, 170, 15, '#4b6d56', 600);
-    if (cutaway) {
-      // The low, flat pack is under the passenger cabin; the motor drives the axle.
-      roundRect(ctx, 420, 317, 170, 24, 5, '#b4e6c1e8', '#527d6a');
-      for (let i = 0; i < 12; i++) roundRect(ctx, 426 + i * 13, 322, 10, 14, 1.5, '#d8f4dd', '#75a78a');
-      motorIcon(ctx, 652, 324, .42);
-      ctx.strokeStyle = '#6f9681'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(505, 343); ctx.lineTo(505, 370); ctx.stroke();
-      roundRect(ctx, 414, 366, 185, 23, 8, '#fffdf6', '#bdd2bf');
-      label(ctx, `底盘电池 · ${batteryOf(vehicle).value} kWh`, 430, 382, 12, '#567661', 600);
-      ctx.beginPath(); ctx.moveTo(672, 324); ctx.lineTo(748, 324); ctx.lineTo(779, 308); ctx.stroke();
-      roundRect(ctx, 779, 289, 158, 43, 11, '#fffdf6', '#bdd2bf');
-      label(ctx, '前轴驱动电机', 792, 307, 12, '#678198');
-      label(ctx, `${motorOf(vehicle).value} kW`, 792, 324, 14, '#486d8e', 600);
-    }
-    // Three actual draggable crates. The menu is the keyboard/click alternative.
-    const trays: { part: Part; x: number; title: string }[] = [
-      { part: 'battery', x: 236, title: '电池包' }, { part: 'motor', x: 500, title: '电驱电机' }, { part: 'body', x: 765, title: '个性车身' },
-    ];
-    trays.forEach(({ part, x, title }) => {
-      const active = chosenPart === part;
-      roundRect(ctx, x - 110, 414, 220, 81, 16, active ? '#fffdf3' : '#edf2e8', active ? '#8bb798' : '#c7d4c2');
-      if (part === 'battery') batteryIcon(ctx, x - 47, 453, '#8bc89b', .65);
-      else if (part === 'motor') motorIcon(ctx, x - 47, 453, .63);
-      else drawBody(ctx, x - 51, 454, vehicle, .57);
-      label(ctx, title, x + 5, 446, 16, '#46624d', 600);
-      label(ctx, part === 'battery' ? `${batteryOf(vehicle).value} kWh · ${batteryOf(vehicle).power} kW` : part === 'motor' ? `${motorOf(vehicle).value} kW 电机` : bodyOf(vehicle).title, x + 5, 466, 11, '#587561');
-      label(ctx, '拖上车 / 点击', x + 5, 483, 10, '#80917b');
-    });
-    if (snap) {
-      const sx = snap.part === 'battery' ? 454 : snap.part === 'motor' ? 653 : 503;
-      const sy = snap.part === 'body' ? 256 : 304;
-      ctx.strokeStyle = '#dd9b56'; ctx.lineWidth = 3; ctx.globalAlpha = clamp(snap.remaining / .7);
-      ctx.beginPath();
-      if (snap.part === 'body') {
-        // Keep the installation feedback outside the taller vehicle silhouette.
-        for (const [x, y, dx, dy] of [[280, 116, 1, 1], [726, 116, -1, 1], [280, 390, 1, -1], [726, 390, -1, -1]]) {
-          ctx.moveTo(x, y + dy * 20); ctx.lineTo(x, y); ctx.lineTo(x + dx * 20, y);
-        }
-      } else ctx.ellipse(sx, sy, 68, 40, 0, 0, Math.PI * 2);
-      ctx.stroke(); ctx.globalAlpha = 1;
-    }
-    if (dragging) {
-      const target = dragging.part === 'battery' ? { x: 454, y: 304 } : dragging.part === 'motor' ? { x: 653, y: 304 } : { x: 503, y: 256 };
-      ctx.setLineDash([6, 5]); roundRect(ctx, target.x - 80, target.y - 41, 160, 82, 12, '#fff8e855', '#dfaa68'); ctx.setLineDash([]);
-      ctx.save(); ctx.shadowColor = '#607e5966'; ctx.shadowBlur = 18;
-      if (dragging.part === 'battery') batteryIcon(ctx, dragging.x, dragging.y, '#8bc89b', 1.1);
-      else if (dragging.part === 'motor') motorIcon(ctx, dragging.x, dragging.y, 1.1);
-      else drawBody(ctx, dragging.x, dragging.y, vehicle, 1.1);
-      ctx.restore();
-    }
+    // The assembly preview contains only the selected vehicle on a plain surface.
+    ctx.fillStyle = '#0c1729'; ctx.fillRect(0, 0, 1000, 520);
+    drawBody(ctx, previewCarX, 260 + 25 * previewCarScale, vehicle, previewCarScale);
   }
 
   function drawRoad(ctx: CanvasRenderingContext2D, playbackState: Playback) {
     const outcome = playbackState.outcome, road = ROADS.find(r => r.id === outcome.route)!;
     const sample = sampleOutcome(outcome, playbackState.elapsed / playbackState.displaySeconds);
     const progress = clamp(sample.distance / road.distance);
-    const sky = ctx.createLinearGradient(0, 0, 0, 400); sky.addColorStop(0, '#e5f2ec'); sky.addColorStop(1, '#fcf7e4');
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, 1000, 520);
-    label(ctx, road.title, 43, 56, 29, '#35543f', 600); label(ctx, road.subtitle, 44, 83, 14, '#758771');
-    roundRect(ctx, 725, 29, 227, 59, 14, '#fffdf2', '#d0dec9');
-    label(ctx, `${playbackState.eventPhase || playbackState.paused || playbackState.finished ? 0 : round(sample.speed)} km/h`, 745, 55, 19, '#42644d', 600);
-    label(ctx, `电量 ${round((batteryOf(outcome.vehicle).value * .65 - sample.energy) / batteryOf(outcome.vehicle).value * 100)}%`, 745, 77, 14, '#7a8d74');
+    nightBackdrop(ctx, 1000, 520, true);
+    label(ctx, road.title, 43, 56, 29, '#e8f3ff', 600); label(ctx, road.subtitle, 44, 83, 14, '#a6bad0');
+    roundRect(ctx, 725, 29, 227, 59, 14, '#111c32', '#3d5b7a');
+    label(ctx, `${playbackState.eventPhase || playbackState.paused || playbackState.finished ? 0 : round(sample.speed)} km/h`, 745, 55, 19, '#e8f3ff', 600);
+    label(ctx, `电量 ${round((batteryOf(outcome.vehicle).value * .65 - sample.energy) / batteryOf(outcome.vehicle).value * 100)}%`, 745, 77, 14, '#a6bad0');
     // Distant hills, trees, campus and a charge stop are all native 2D shapes.
-    ctx.fillStyle = '#d2e3ce'; ctx.beginPath(); ctx.moveTo(0, 288); ctx.quadraticCurveTo(120, 165, 255, 289); ctx.quadraticCurveTo(425, 140, 607, 285); ctx.quadraticCurveTo(800, 186, 1000, 276); ctx.lineTo(1000, 520); ctx.lineTo(0, 520); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#162944'; ctx.beginPath(); ctx.moveTo(0, 288); ctx.quadraticCurveTo(120, 165, 255, 289); ctx.quadraticCurveTo(425, 140, 607, 285); ctx.quadraticCurveTo(800, 186, 1000, 276); ctx.lineTo(1000, 520); ctx.lineTo(0, 520); ctx.closePath(); ctx.fill();
     for (const [x, y, h] of [[66, 257, 42], [216, 232, 60], [744, 237, 49], [899, 220, 73]]) {
-      ctx.fillStyle = '#a4c59c'; ctx.beginPath(); ctx.ellipse(x, y, h * .4, h * .65, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#8eaa80'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(x, y + 11); ctx.lineTo(x, y + h); ctx.stroke();
+      ctx.fillStyle = '#244255'; ctx.beginPath(); ctx.ellipse(x, y, h * .4, h * .65, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#456885'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(x, y + 11); ctx.lineTo(x, y + h); ctx.stroke();
     }
     if (outcome.route === 'city') {
-      roundRect(ctx, 372, 200, 172, 103, 8, '#f2dbab', '#d1bb91');
-      roundRect(ctx, 414, 240, 28, 63, 3, '#c0d7c2');
-      for (let i = 0; i < 4; i++) roundRect(ctx, 389 + i * 35, 218, 19, 23, 3, '#fff8df');
-      label(ctx, '小芽校园', 417, 192, 16, '#8d966c', 600);
+      roundRect(ctx, 372, 200, 172, 103, 8, '#27324a', '#bc98ff70');
+      roundRect(ctx, 414, 240, 28, 63, 3, '#175265');
+      for (let i = 0; i < 4; i++) roundRect(ctx, 389 + i * 35, 218, 19, 23, 3, '#75f1bb');
+      label(ctx, '小芽校园', 417, 192, 16, '#a6bad0', 600);
     }
     const roadY = (x: number) => outcome.route === 'hill' ? 378 - clamp((x - 125) / 760) * 134 : 337;
     const roadPath = (offset: number) => {
@@ -599,13 +516,13 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
       if (outcome.route === 'hill') { ctx.lineTo(125, roadY(125) + offset); ctx.lineTo(885, roadY(885) + offset); }
       ctx.lineTo(1040, roadY(1000) + offset);
     };
-    ctx.strokeStyle = '#bdc9af'; ctx.lineWidth = 61; ctx.lineCap = 'round'; roadPath(0); ctx.stroke();
-    ctx.strokeStyle = '#f6f7e8'; ctx.lineWidth = 3; ctx.setLineDash([24, 19]); roadPath(18); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#1a293e'; ctx.lineWidth = 61; ctx.lineCap = 'round'; roadPath(0); ctx.stroke();
+    ctx.strokeStyle = '#47eaffb8'; ctx.lineWidth = 3; ctx.setLineDash([24, 19]); roadPath(18); ctx.stroke(); ctx.setLineDash([]);
     // Start/finish flags avoid a misleading implication of real-time scale.
     for (const [x, text] of [[115, '出发'], [901, '终点']] as const) {
       const y = roadY(x) - 33;
-      ctx.strokeStyle = '#758d69'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y - 58); ctx.lineTo(x, y); ctx.stroke();
-      roundRect(ctx, x, y - 57, 55, 26, 3, text === '终点' ? '#eeb98d' : '#adc7a1'); label(ctx, text, x + 9, y - 39, 13, '#526d4b');
+      ctx.strokeStyle = '#5a7492'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x, y - 58); ctx.lineTo(x, y); ctx.stroke();
+      roundRect(ctx, x, y - 57, 55, 26, 3, text === '终点' ? '#452f48' : '#184d49'); label(ctx, text, x + 9, y - 39, 13, '#e8f3ff');
     }
     const carX = 118 + progress * 768, carY = roadY(carX) - 20;
     ctx.save(); ctx.translate(carX, carY); if (outcome.route === 'hill') ctx.rotate(-Math.atan(.18));
@@ -614,56 +531,55 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
     const activeEvent = playbackState.challenge.events[Math.min(playbackState.challenge.index, 2)];
     if (!playbackState.finished) {
       const markerX = clamp(carX + 130, 265, 875), markerY = roadY(markerX);
-      roundRect(ctx, markerX - 63, markerY - 124, 126, 42, 10, playbackState.eventPhase ? '#fff0cb' : '#fffdf2', '#c9ad78');
-      label(ctx, activeEvent.scene, markerX - 48, markerY - 98, 17, '#806334', 600);
-      ctx.strokeStyle = '#9a8b69'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(markerX, markerY - 82); ctx.lineTo(markerX, markerY - 27); ctx.stroke();
+      roundRect(ctx, markerX - 63, markerY - 124, 126, 42, 10, playbackState.eventPhase ? '#493841' : '#111c32', '#f5bc65');
+      label(ctx, activeEvent.scene, markerX - 48, markerY - 98, 17, '#f5bc65', 600);
+      ctx.strokeStyle = '#6b819d'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(markerX, markerY - 82); ctx.lineTo(markerX, markerY - 27); ctx.stroke();
       if (outcome.route === 'city') {
         if (activeEvent.scene === '红灯停车') {
-          roundRect(ctx, markerX + 28, markerY - 84, 24, 61, 7, '#3d5350');
-          for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(markerX + 40, markerY - 72 + i * 18, 6, 0, Math.PI * 2); ctx.fillStyle = i === 0 ? '#ed8469' : '#768b75'; ctx.fill(); }
-          ctx.fillStyle = '#fffdf1'; ctx.fillRect(markerX - 42, markerY - 24, 5, 49);
+          roundRect(ctx, markerX + 28, markerY - 84, 24, 61, 7, '#101d33');
+          for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(markerX + 40, markerY - 72 + i * 18, 6, 0, Math.PI * 2); ctx.fillStyle = i === 0 ? '#ff6e91' : '#354864'; ctx.fill(); }
+          ctx.fillStyle = '#d7f5ff'; ctx.fillRect(markerX - 42, markerY - 24, 5, 49);
         } else if (activeEvent.scene === '减速带') {
-          for (let i = 0; i < 5; i++) roundRect(ctx, markerX - 40 + i * 18, markerY - 22, 9, 45, 2, i % 2 ? '#55645a' : '#e7bd60');
+          for (let i = 0; i < 5; i++) roundRect(ctx, markerX - 40 + i * 18, markerY - 22, 9, 45, 2, i % 2 ? '#17263b' : '#f5bc65');
         } else if (activeEvent.scene === '视线遮挡') {
           drawPremiumCar(ctx, markerX + 12, markerY - 28, '#e5bd63', .85, 0, 'touring');
         } else if (activeEvent.scene === '安全送达') {
           roundRect(ctx, markerX - 22, markerY - 56, 40, 31, 3, '#dbb176', '#99734c');
           roundRect(ctx, markerX + 18, markerY - 46, 29, 21, 3, '#e8c99b', '#99734c');
         } else {
-          for (let i = 0; i < 5; i++) roundRect(ctx, markerX - 35 + i * 16, markerY - 20, 9, 44, 1, '#fffdf1');
+          for (let i = 0; i < 5; i++) roundRect(ctx, markerX - 35 + i * 16, markerY - 20, 9, 44, 1, '#d7f5ff');
           ctx.fillStyle = '#d68a66'; ctx.beginPath(); ctx.arc(markerX + 10, markerY - 51, 8, 0, Math.PI * 2); ctx.fill();
           ctx.strokeStyle = '#637d8a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(markerX + 10, markerY - 42); ctx.lineTo(markerX + 10, markerY - 22); ctx.lineTo(markerX, markerY - 9); ctx.moveTo(markerX + 10, markerY - 22); ctx.lineTo(markerX + 21, markerY - 9); ctx.stroke();
         }
       } else if (outcome.route === 'range') {
-        roundRect(ctx, markerX - 18, markerY - 65, 36, 45, 5, '#83b8a2', '#4b7e68');
-        label(ctx, 'ϟ', markerX - 8, markerY - 34, 29, '#fffdf2', 700);
+        roundRect(ctx, markerX - 18, markerY - 65, 36, 45, 5, '#236b63', '#75f1bb');
+        label(ctx, 'ϟ', markerX - 8, markerY - 34, 29, '#e8f3ff', 700);
         if (activeEvent.scene === '雨天车距') {
-          ctx.strokeStyle = '#8aaeb9'; ctx.lineWidth = 1.5;
+          ctx.strokeStyle = '#79b8e3'; ctx.lineWidth = 1.5;
           for (let i = 0; i < 22; i++) { const rx = 70 + i * 41; const ry = 130 + (i % 4) * 35; ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 7, ry + 16); ctx.stroke(); }
         }
       } else {
-        ctx.fillStyle = '#dd9b60'; ctx.beginPath(); ctx.moveTo(markerX, markerY - 64); ctx.lineTo(markerX - 20, markerY - 24); ctx.lineTo(markerX + 20, markerY - 24); ctx.closePath(); ctx.fill();
-        label(ctx, '!', markerX - 4, markerY - 33, 21, '#fff8df', 700);
+        ctx.fillStyle = '#f5bc65'; ctx.beginPath(); ctx.moveTo(markerX, markerY - 64); ctx.lineTo(markerX - 20, markerY - 24); ctx.lineTo(markerX + 20, markerY - 24); ctx.closePath(); ctx.fill();
+        label(ctx, '!', markerX - 4, markerY - 33, 21, '#e8f3ff', 700);
       }
     }
-    roundRect(ctx, 40, 422, 920, 65, 16, '#f7f7ea', '#d0ddc7');
-    label(ctx, `${round(sample.distance / 1000, outcome.route === 'range' ? 1 : 2)} / ${round(road.distance / 1000, 1)} km`, 62, 452, 20, '#52764e', 600);
-    label(ctx, `使用 ${round(sample.energy, 2)} kWh`, 63, 475, 13, '#8a977f');
+    roundRect(ctx, 40, 422, 920, 65, 16, '#111c32', '#3d5b7a');
+    label(ctx, `${round(sample.distance / 1000, outcome.route === 'range' ? 1 : 2)} / ${round(road.distance / 1000, 1)} km`, 62, 452, 20, '#e8f3ff', 600);
+    label(ctx, `使用 ${round(sample.energy, 2)} kWh`, 63, 475, 13, '#a6bad0');
     drawChain(ctx, 452, !playbackState.paused && !playbackState.finished && !playbackState.eventPhase);
-    label(ctx, playbackState.finished ? '挑战记录已保存' : playbackState.eventPhase ? '已停稳 · 请在下方选择' : playbackState.paused ? '已暂停 · 可以继续' : '前进中 · 留意路况', 784, 455, 12, '#526b4c');
+    label(ctx, playbackState.finished ? '挑战记录已保存' : playbackState.eventPhase ? '已停稳 · 请在下方选择' : playbackState.paused ? '已暂停 · 可以继续' : '前进中 · 留意路况', 784, 455, 12, '#e8f3ff');
     if (playbackState.finished) {
-      roundRect(ctx, 372, 115, 263, 53, 20, '#fff9e8', '#ddc99c');
-      label(ctx, outcome.ratio >= .999 ? '✦ 到站啦！你的小车真棒' : '✦ 有新发现，再换个搭档', 397, 148, 18, '#92733e', 600);
+      roundRect(ctx, 372, 115, 263, 53, 20, '#302941', '#f5bc65');
+      label(ctx, outcome.ratio >= .999 ? '✦ 到站啦！你的小车真棒' : '✦ 有新发现，再换个搭档', 397, 148, 18, '#f5bc65', 600);
     }
   }
 
   stage = createStage(stageHost, {
-    label: '新能源造车工坊：可拖动电池、电机与车身，使用旁边按钮也能装配；路测使用合成教学模型。',
+    label: '新能源车辆展示：主图只显示当前车型与车身颜色，部件可通过选装按钮或下方参数图配置；路测使用合成教学模型。',
     draw(ctx) { if (playback) drawRoad(ctx, playback); else drawWorkshop(ctx); },
     update(dt) {
       if (destroyed) return;
       if (!playback || (!playback.paused && !playback.eventPhase)) elapsed += dt;
-      if (snap) { snap.remaining -= dt; if (snap.remaining <= 0) snap = null; }
       if (playback && !playback.paused && !playback.finished && !playback.eventPhase) {
         playback.elapsed = Math.min(playback.displaySeconds, playback.elapsed + dt);
         const nextEvent = playback.challenge.events[playback.challenge.index];
@@ -675,35 +591,21 @@ export function mountFactory(host: HTMLElement, api: GameAPI): MountedGame {
         if (playback.elapsed >= playback.displaySeconds) finishRun();
       }
     },
-    pointer(kind, x, y) {
-      if (playback) return;
-      if (kind === 'down') {
-        if (y >= 414 && y <= 495) {
-          const part: Part | undefined = Math.abs(x - 236) <= 110 ? 'battery' : Math.abs(x - 500) <= 110 ? 'motor' : Math.abs(x - 765) <= 110 ? 'body' : undefined;
-          if (part) { chosenPart = part; dragging = { part, x, y }; updateControls(); }
-        }
-      } else if (kind === 'move' && dragging) { dragging.x = x; dragging.y = y; }
-      else if (kind === 'up' && dragging) {
-        const part = dragging.part;
-        const target = part === 'battery' ? { x: 454, y: 304 } : part === 'motor' ? { x: 653, y: 304 } : { x: 503, y: 256 };
-        const onTarget = Math.abs(x - target.x) < (part === 'body' ? 230 : 150) && Math.abs(y - target.y) < 90;
-        // Clicking a crate is the zero-precision alternative to dragging.
-        const isClick = y >= 414 && y <= 495;
-        if (onTarget || isClick) {
-          snap = { part, remaining: .7 };
-          feedback(`${part === 'battery' ? '电池包' : part === 'motor' ? '电机' : '车身'}已吸附到装配位！选旁边的配方，就能换新搭档。`);
-        } else feedback('部件已回到工位。再拖一次，或直接点击旁边的配方。');
-        dragging = null;
-      }
-    },
   });
   updateControls();
   persist();
   return { destroy() {
     if (destroyed) return; destroyed = true;
+    finishWidgetDrag(true); widgetObserver.disconnect();
+    widgetHandle.removeEventListener('pointerdown', onWidgetPointerDown);
+    widgetHandle.removeEventListener('pointermove', onWidgetPointerMove);
+    widgetHandle.removeEventListener('pointerup', onWidgetPointerUp);
+    widgetHandle.removeEventListener('pointercancel', onWidgetPointerCancel);
+    widgetHandle.removeEventListener('lostpointercapture', onWidgetPointerCancel);
+    window.removeEventListener('blur', onWidgetBlur);
     persist(); stage.destroy();
     host.removeEventListener('click', onClick); host.removeEventListener('input', onInput); host.removeEventListener('change', onChange);
+    host.removeEventListener('keydown', onKeyDown);
     document.removeEventListener('visibilitychange', onVisibility);
-    stageHost.removeEventListener('pointerleave', onPointerLeave);
   } };
 }

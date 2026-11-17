@@ -1,57 +1,122 @@
 [
   {
-    "id": "hong-kong-traffic",
-    "file": "hong-kong-traffic.jpg",
-    "title": "File:HK YTM 油麻地 Yau Ma Tei 彌敦道 Nathan Road traffic jam March 2021 SS2 01.jpg",
-    "source": "https://commons.wikimedia.org/wiki/File:HK_YTM_%E6%B2%B9%E9%BA%BB%E5%9C%B0_Yau_Ma_Tei_%E5%BD%8C%E6%95%A6%E9%81%93_Nathan_Road_traffic_jam_March_2021_SS2_01.jpg",
-    "author": "Keun PAgosau LVHSOVH",
+    "id": "hangzhou-qianjiang",
+    "file": "hangzhou-qianjiang.jpg",
+    "title": "File:杭州钱江新城 8.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:%E6%9D%AD%E5%B7%9E%E9%92%B1%E6%B1%9F%E6%96%B0%E5%9F%8E_8.jpg",
+    "author": "EditQ",
     "license": "CC BY-SA 4.0",
     "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
-    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/af/HK_YTM_%E6%B2%B9%E9%BA%BB%E5%9C%B0_Yau_Ma_Tei_%E5%BD%8C%E6%95%A6%E9%81%93_Nathan_Road_traffic_jam_March_2021_SS2_01.jpg/1280px-HK_YTM_%E6%B2%B9%E9%BA%BB%E5%9C%B0_Yau_Ma_Tei_%E5%BD%8C%E6%95%A6%E9%81%93_Nathan_Road_traffic_jam_March_2021_SS2_01.jpg",
-    "modifications": "缩放至1280像素宽；应用内人工标注、天气和点云为独立教学叠层"
+    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fe/%E6%9D%AD%E5%B7%9E%E9%92%B1%E6%B1%9F%E6%96%B0%E5%9F%8E_8.jpg/1920px-%E6%9D%AD%E5%B7%9E%E9%92%B1%E6%B1%9F%E6%96%B0%E5%9F%8E_8.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "description": "​杭州钱江新城",
+    "modifications": "等比缩放至1600像素宽，保留完整画面；扫描、点云、标框与测距为独立教学叠层",
+    "downloadedSize": [
+      1920,
+      1440
+    ],
+    "size": [
+      1600,
+      1200
+    ]
   },
   {
-    "id": "amsterdam-cycleway",
-    "file": "amsterdam-cycleway.jpg",
-    "title": "File:Cycling Amsterdam 04.jpg",
-    "source": "https://commons.wikimedia.org/wiki/File:Cycling_Amsterdam_04.jpg",
-    "author": "Alfredo Borba",
+    "id": "hangzhou-civic",
+    "file": "hangzhou-civic.jpg",
+    "title": "File:杭州钱江新城 4.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:%E6%9D%AD%E5%B7%9E%E9%92%B1%E6%B1%9F%E6%96%B0%E5%9F%8E_4.jpg",
+    "author": "EditQ",
     "license": "CC BY-SA 4.0",
     "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
-    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e7/Cycling_Amsterdam_04.jpg/1280px-Cycling_Amsterdam_04.jpg",
-    "modifications": "缩放至1280像素宽；应用内人工标注、天气和点云为独立教学叠层"
+    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/%E6%9D%AD%E5%B7%9E%E9%92%B1%E6%B1%9F%E6%96%B0%E5%9F%8E_4.jpg/1920px-%E6%9D%AD%E5%B7%9E%E9%92%B1%E6%B1%9F%E6%96%B0%E5%9F%8E_4.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "description": "​杭州钱江新城",
+    "modifications": "等比缩放至1600像素宽，保留完整画面；扫描、点云、标框与测距为独立教学叠层",
+    "downloadedSize": [
+      1920,
+      1440
+    ],
+    "size": [
+      1600,
+      1200
+    ]
   },
   {
-    "id": "amsterdam-junction",
-    "file": "amsterdam-junction.jpg",
-    "title": "File:Sunny Street scene in the street Sarphatistraat with cyclists biking; free photo Amsterdam, Fons Heijnsbroek 10-2021.jpg",
-    "source": "https://commons.wikimedia.org/wiki/File:Sunny_Street_scene_in_the_street_Sarphatistraat_with_cyclists_biking;_free_photo_Amsterdam,_Fons_Heijnsbroek_10-2021.jpg",
-    "author": "Fons Heijnsbroek",
+    "id": "hangzhou-leifeng",
+    "file": "hangzhou-leifeng.jpg",
+    "title": "File:Leifeng Pagoda at Dusk.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Leifeng_Pagoda_at_Dusk.jpg",
+    "author": "Yinweichen",
     "license": "CC BY-SA 4.0",
     "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
-    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/15/Sunny_Street_scene_in_the_street_Sarphatistraat_with_cyclists_biking%3B_free_photo_Amsterdam%2C_Fons_Heijnsbroek_10-2021.jpg/1280px-Sunny_Street_scene_in_the_street_Sarphatistraat_with_cyclists_biking%3B_free_photo_Amsterdam%2C_Fons_Heijnsbroek_10-2021.jpg",
-    "modifications": "缩放至1280像素宽；应用内人工标注、天气和点云为独立教学叠层"
+    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/50/Leifeng_Pagoda_at_Dusk.jpg/1920px-Leifeng_Pagoda_at_Dusk.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "description": "Leifeng Pagoda at Dusk",
+    "modifications": "等比缩放至1600像素宽，保留完整画面；扫描、点云、标框与测距为独立教学叠层",
+    "downloadedSize": [
+      1920,
+      1080
+    ],
+    "size": [
+      1600,
+      900
+    ]
   },
   {
-    "id": "amsterdam-tramway",
-    "file": "amsterdam-tramway.jpg",
-    "title": "File:Cyclist hurrying at Vijzelgracht × Prinsengracht in Amsterdam.jpg",
-    "source": "https://commons.wikimedia.org/wiki/File:Cyclist_hurrying_at_Vijzelgracht_%C3%97_Prinsengracht_in_Amsterdam.jpg",
-    "author": "Andrej Shadura",
+    "id": "hangzhou-westlake",
+    "file": "hangzhou-westlake.jpg",
+    "title": "File:Su Causeway near West Lake, looking towards north 20120529 1.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Su_Causeway_near_West_Lake,_looking_towards_north_20120529_1.jpg",
+    "author": "DXR",
     "license": "CC BY-SA 4.0",
     "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
-    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/96/Cyclist_hurrying_at_Vijzelgracht_%C3%97_Prinsengracht_in_Amsterdam.jpg/1280px-Cyclist_hurrying_at_Vijzelgracht_%C3%97_Prinsengracht_in_Amsterdam.jpg",
-    "modifications": "缩放至1280像素宽；应用内人工标注、天气和点云为独立教学叠层"
+    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fa/Su_Causeway_near_West_Lake%2C_looking_towards_north_20120529_1.jpg/1920px-Su_Causeway_near_West_Lake%2C_looking_towards_north_20120529_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "description": "The so called Su Causeway, a long pedestrian avenue at the west side of the West Lake",
+    "modifications": "等比缩放至1600像素宽，保留完整画面；扫描、点云、标框与测距为独立教学叠层",
+    "downloadedSize": [
+      1920,
+      1197
+    ],
+    "size": [
+      1600,
+      998
+    ]
   },
   {
-    "id": "san-francisco-crosswalk",
-    "file": "san-francisco-crosswalk.jpg",
-    "title": "File:Crosswalk of Market at Third, San Francisco.jpg",
-    "source": "https://commons.wikimedia.org/wiki/File:Crosswalk_of_Market_at_Third,_San_Francisco.jpg",
-    "author": "Dllu",
+    "id": "hangzhou-baima",
+    "file": "hangzhou-baima.jpg",
+    "title": "File:15th China International Cartoon & Animation Festival.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:15th_China_International_Cartoon_%26_Animation_Festival.jpg",
+    "author": "Leiem",
+    "license": "CC0",
+    "licenseUrl": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/08/15th_China_International_Cartoon_%26_Animation_Festival.jpg/1920px-15th_China_International_Cartoon_%26_Animation_Festival.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+    "description": "​第15届中国国际动漫节会场，拍摄于杭州（滨江）白马湖动漫广场",
+    "modifications": "等比缩放至1600像素宽，保留完整画面；扫描、点云、标框与测距为独立教学叠层",
+    "downloadedSize": [
+      1920,
+      1440
+    ],
+    "size": [
+      1600,
+      1200
+    ]
+  },
+  {
+    "id": "hangzhou-nanshan",
+    "file": "hangzhou-nanshan.jpg",
+    "title": "File:Nanshan Rd 20161006.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Nanshan_Rd_20161006.jpg",
+    "author": "Tyg728",
     "license": "CC BY-SA 4.0",
     "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
-    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b3/Crosswalk_of_Market_at_Third%2C_San_Francisco.jpg/1280px-Crosswalk_of_Market_at_Third%2C_San_Francisco.jpg",
-    "modifications": "缩放至1280像素宽；应用内人工标注、天气和点云为独立教学叠层"
+    "downloadedFrom": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/Nanshan_Rd_20161006.jpg/1920px-Nanshan_Rd_20161006.jpg",
+    "downloadedSize": [
+      1920,
+      1200
+    ],
+    "size": [
+      1600,
+      1000
+    ],
+    "description": "​杭州市南山路 位于西湖景区东南环湖傍山而行。",
+    "modifications": "等比缩放至1600像素宽，保留完整画面；应用内框选、天气和点云为独立教学叠层"
   }
 ]

@@ -1,129 +1,122 @@
-import { createStage, drawCar, label, roundRect } from '../platform';
+import { createStage } from '../platform';
 import type { GameAPI, MountedGame } from '../types';
+import { REGEN_ROUTES, terrainAt } from './regen-route';
+import { ACTIONS, MODES, MASS, GRAVITY, DT, MODEL_VERSION, createRegen, startRegen, setRegenAction, stepRegen, suggestedAction, kinetic, soc, acceptance, netEnergy, energyError, makeAttempt, replayRegen, referenceEnergy, readAttempts, comparable, type RegenAction, type RegenMode, type RegenState, type RegenAttempt } from './regen-model';
+import { regenShell, drawRegen, actionNames, modeIds, kj, starText } from './regen-view';
 import './regen.css';
 
-type Mode = 'normal' | 'cold' | 'full';
-interface Round { mode: Mode; x: number; speed: number; initial: number; battery: number; friction: number; losses: number; power: number; stopped: boolean; elapsed: number; assist: boolean }
-interface Result { mode: Mode; distance: number; precision: number; battery: number; friction: number; losses: number; assisted: boolean }
-const modes: Record<Mode, { name: string; soc: number; temp: number; power: number; description: string }> = {
-  normal: { name: '常温电池', soc: 65, temp: 25, power: 20000, description: '电池接收能力充足，一部分能量可以回到电池。' },
-  cold: { name: '低温电池', soc: 65, temp: -5, power: 3500, description: '低温时回收受到限制，摩擦制动承担更多任务。' },
-  full: { name: '满电电池', soc: 100, temp: 25, power: 0, description: '电池已经满了，这次教学车型不再接收回收能量。' }
-};
-const MASS = 1300, START_SPEED = 14, GOAL = 63, TOLERANCE = 17;
-const energy = (v: number) => .5 * MASS * v * v;
-function newRound(mode: Mode): Round { return { mode, x:0, speed:START_SPEED, initial:energy(START_SPEED), battery:0, friction:0, losses:0, power:0, stopped:false, elapsed:0, assist:false }; }
-export function mountRegen(host: HTMLElement, api: GameAPI): MountedGame {
-  const saved = api.getRecord('regen');
-  const results: Partial<Record<Mode, Result>> = (saved.results as Partial<Record<Mode, Result>>) || {};
-  const best: Partial<Record<Mode, number>> = (saved.best as Partial<Record<Mode, number>>) || {};
-  const seen: Mode[] = Array.isArray(saved.seen) ? saved.seen as Mode[] : [];
-  let mode: Mode = 'normal', round = newRound(mode), running = false, brake = false, disposed = false, lastUi = 0;
-  let accumulator = 0;
-  host.innerHTML = `<div class="experience regen-experience"><section class="playfield regen-playfield"><div class="regen-stage-head"><span class="regen-live"><i></i> ENERGY TRACK</span><span>二维能量实验 · 教学仿真</span></div><div class="regen-stage"></div><div class="regen-live-stats"><div><span>当前车速</span><strong data-speed>0 <small>km/h</small></strong></div><div><span>已回收能量</span><strong data-energy>0 <small>kJ</small></strong></div><div><span>电池状态</span><strong data-soc>65 <small>%</small></strong></div></div><div class="stage-bar"><span data-round-status>按“出发”，在绿色区域停下小车。</span><span class="regen-key">SPACE / 按住刹车</span></div></section><aside class="control-panel regen-controls"><div class="control-group"><span class="chip">04 · 刹车充电秀</span><h2>轻轻一刹，看见能量。</h2><p>看准绿色停车区，按住刹车。停早、停晚，都可以再试一次。</p></div><div class="control-group"><label>换一块电池试试</label><div class="regen-modes">${(Object.keys(modes) as Mode[]).map(m => `<button data-mode="${m}" class="regen-mode ${m === mode ? 'active' : ''}"><span>${m==='normal'?'25°C':m==='cold'?'−5°C':'100%'}</span><b>${modes[m].name}</b><i data-mode-stamp="${m}">${results[m] ? '已体验' : '试试看'}</i></button>`).join('')}</div></div><p class="regen-mode-description" data-mode-description>${modes[mode].description}</p><button class="btn btn-primary btn-full" data-start>出发，试一圈 →</button><button class="regen-brake" data-brake aria-label="按住刹车">按住刹车 <span>也可以按住空格键</span></button><button class="btn btn-full btn-secondary" data-assist>帮我停进停车区</button><div class="regen-result" data-result hidden><strong data-result-title>这次体验完成啦</strong><p data-result-copy></p><button class="btn btn-small btn-full" data-energy-view>看看能量去了哪里</button></div><div class="regen-energy-breakdown" data-breakdown hidden><div><span>回到电池</span><b data-battery-account></b></div><div><span>摩擦制动热</span><b data-friction-account></b></div><div><span>其他损耗</span><b data-loss-account></b></div><p>三部分相加，等于出发时的运动能量。</p></div></aside><div class="science-note"><span class="regen-note-bolt">↯</span><span><strong>一个新发现：</strong>刹车时，电机可以把部分运动能量变成电能。电池能接收多少，会随温度和剩余电量变化。</span></div></div>`;
-  const query = <T extends HTMLElement>(selector: string) => host.querySelector<T>(selector)!;
-  function save() {
-    const records = (Object.keys(modes) as Mode[]).flatMap(m => results[m] ? [
-      { label: `${modes[m].name} · 停车位置`, value: `${results[m]!.distance.toFixed(1)} m` },
-      { label: `${modes[m].name} · 回到电池`, value: `${(results[m]!.battery/1000).toFixed(1)} kJ` }
-    ] : []);
-    api.record('regen', { results, best, seen, summary: '我看见了：电池状态不同，刹车时能量的去向也会不同。', report: [
-      {label:'实验车辆质量',value:'1300 kg'}, {label:'每轮初始车速',value:'50.4 km/h'}, {label:'每轮初始动能',value:`${(energy(START_SPEED)/1000).toFixed(1)} kJ`}, ...records
-    ] });
+export function mountRegen(host:HTMLElement,api:GameAPI):MountedGame {
+  const saved=api.getRecord('regen');let attempts=readAttempts(saved.courierAttempts);
+  const bestStars:Record<string,number>={},manualBest:Partial<Record<RegenMode,number>>={};
+  const finite=(v:unknown)=>Number.isFinite(Number(v))?Number(v):0;
+  for(const [key,value] of Object.entries((saved.courierStars||{}) as object))if(/^[0-2]-(normal|cold|full)$/.test(key))bestStars[key]=Math.min(3,Math.max(0,Math.floor(finite(value))));
+  for(const m of modeIds)manualBest[m]=Math.min(1,Math.max(0,finite((saved.courierManualBest as Record<string,unknown>)?.[m])));
+  const seen:RegenMode[]=Array.isArray(saved.seen)?saved.seen.filter((m):m is RegenMode=>modeIds.includes(m)):[];
+  let route=0,mode:RegenMode='normal',round=createRegen(route,mode),checkpoint=structuredClone(round);
+  let id=0,finishedId=-1,disposed=false,accumulator=0,lastUI=0,deliveryAge=0,temporaryBrake=false,coaching=false,previousAction:RegenAction='coast';
+  let replay:{source:RegenAttempt;states:RegenState[];time:number;playing:boolean;kind:'friction'|'battery'}|null=null;
+  let finding=typeof saved.courierFinding==='string'?saved.courierFinding.slice(0,600):'',findingSource=typeof saved.courierFindingSource==='string'?saved.courierFindingSource:'';
+  let currentAttempt:RegenAttempt|null=null;
+  host.innerHTML=regenShell();const q=<T extends HTMLElement=HTMLElement>(selector:string)=>host.querySelector<T>(selector)!;
+  function persist(status?:string) {
+    const last=attempts.at(-1),report:{label:string;value:string}[]=[];
+    if(last)report.push({label:'实际任务 / 电池',value:`${REGEN_ROUTES[last.route].name} / ${MODES[last.mode].name}`},{label:'最近已记录的一趟',value:`${last.success?'全部投递完成':'待重试'}${last.assisted?' · 教练示范':''}${last.practice?' · 片段练习':''}`},{label:'我改了什么',value:'使用行驶、滑行、轻刹、重刹控制投递行程'},{label:'出现了什么变化',value:`驱动及辅助用电 ${kj(last.drawn)} kJ，回到电池 ${kj(last.recovered)} kJ，净耗电 ${kj(last.drawn-last.recovered)} kJ`},{label:'能量分配',value:`摩擦热 ${kj(last.friction)} kJ，其他损耗 ${kj(last.losses)} kJ，剩余动能 ${kj(last.remaining)} kJ`},{label:'停车记录',value:last.deliveries.map((d,i)=>`第${i+1}站 ${d.x.toFixed(2)}m`).join(' / ')||`停在 ${last.x.toFixed(2)}m`},{label:'本趟星级',value:starText(last.stars)});
+    if(last){const config=REGEN_ROUTES[last.route],heightDrop=terrainAt(config,0).height-terrainAt(config,last.x).height;report.push({label:'输入能量的来源',value:`电池输出 ${kj(last.drawn)} kJ + 高度下降 ${heightDrop.toFixed(2)} m 提供 ${kj(MASS*GRAVITY*heightDrop)} kJ。对应剩余动能、回到电池、摩擦热与其他损耗。`});}
+    if(status)report.unshift({label:'当前体验状态',value:status});
+    if(finding)report.push({label:'我懂了什么',value:finding},{label:'发现来自哪次实验',value:findingSource});
+    report.push({label:'最佳挑战星级',value:Object.entries(bestStars).map(([key,n])=>`${REGEN_ROUTES[Number(key[0])].name}·${MODES[key.slice(2) as RegenMode].name} ${starText(n)}`).join(' / ')||'尚未取得手动挑战星级'},{label:'模型边界',value:'1300 kg；45 kWh；教学仿真，含驱动、重力、再生制动、摩擦与转换损耗'});
+    api.record('regen',{schemaVersion:MODEL_VERSION,courierAttempts:attempts,courierStars:bestStars,courierManualBest:manualBest,seen,courierFinding:finding,courierFindingSource:findingSource,
+      summary:status||(last?`${REGEN_ROUTES[last.route].name}：${last.success?'投递完成':'需要调整'}，实际回收 ${kj(last.recovered)} kJ。`:'准备体验动能回收快递。'),report});
   }
-  function updateUI() {
-    query('[data-speed]').innerHTML = `${running ? Math.round(round.speed*3.6) : round.stopped ? 0 : 50} <small>km/h</small>`;
-    query('[data-energy]').innerHTML = `${(round.battery/1000).toFixed(1)} <small>kJ</small>`;
-    query('[data-soc]').innerHTML = `${modes[mode].soc} <small>%</small>`;
-    query<HTMLButtonElement>('[data-brake]').classList.toggle('pressed', brake);
-    query<HTMLButtonElement>('[data-start]').textContent = running ? '重新出发 →' : round.stopped ? '再玩一次 →' : '出发，试一圈 →';
-    for (const m of Object.keys(modes) as Mode[]) query(`[data-mode-stamp="${m}"]`).textContent = results[m] ? '已体验 ✓' : '试试看';
+  function markExperience(){if(round.x>2){api.award('regen',`experience-${mode}`,20,`${MODES[mode].name}体验`);api.complete('regen');}}
+  function reset(nextRoute=route,nextMode=mode){route=nextRoute;mode=nextMode;round=createRegen(route,mode);checkpoint=structuredClone(round);id++;finishedId=-1;currentAttempt=null;replay=null;accumulator=0;temporaryBrake=false;coaching=false;deliveryAge=0;q('[data-result]').hidden=true;q('[data-comparison]').hidden=true;q<HTMLSelectElement>('[data-battery]').value=mode;updateUI();}
+  function depart(){if(round.phase==='complete'||round.phase==='failed')reset();const first=round.phase==='ready';startRegen(round);checkpoint=structuredClone(round);temporaryBrake=false;deliveryAge=0;persist('进行中：正在体验动能回收。');updateUI();if(first&&window.innerWidth<=900)q('.regen-stage').scrollIntoView({behavior:'instant',block:'start'});}
+  function pause(){if(round.phase!=='running'&&round.phase!=='delivery')return;round.paused=true;temporaryBrake=false;setRegenAction(round,'coast');accumulator=0;updateUI();}
+  function act(action:RegenAction){if(round.phase!=='running'||round.paused)return;coaching=false;setRegenAction(round,action);updateUI();}
+  function statusText(){
+    if(round.phase==='ready')return '点击出发。先看站牌，再用滑行和轻刹靠站；以车底定位点停入绿色区为准。';
+    if(round.phase==='complete')return '快递送到啦！下面可以重放同一次操作，看能量怎样回到电池。';
+    if(round.phase==='failed')return `${round.emergency}。本次能量已记录，可以重试这一段。`;
+    if(round.paused)return '已暂停。时间和能量冻结；继续前手柄已回到滑行。';
+    if(round.phase==='delivery')return `第${round.stopIndex}站已送达，点击“继续投递”前往下一站。`;
+    if(round.emergency)return round.emergency;
+    if(coaching)return `教练示范 · 正在${actionNames[round.action]}，观察同一个电机的能量流向。`;
+    if(round.v<.2&&round.x>2){const config=REGEN_ROUTES[route];return Math.abs(round.x-config.stops[round.stopIndex].x)<=config.tolerance?'已进入交付区，保持制动，停稳后自动收货。':'停早了也没关系，选择“行驶”低速靠站。';}
+    const next=suggestedAction(round);return next==='hard'?'接近站点，及时加大制动，安全停车优先。':next==='light'?'可以轻刹了：观察动能减少、能量流回电池。':next==='coast'?'试试滑行，利用已有速度靠近站点。':'前方还有一段路，行驶时电池向电机供能。';
   }
-  function finish() {
-    if (round.stopped) return;
-    round.stopped = true; running = false; brake = false;
-    // The final energy was distributed by the step integrator; nothing is awarded for raw kJ.
-    const precision = Math.max(0, 1-Math.abs(round.x-GOAL)/TOLERANCE);
-    results[mode] = {mode, distance:round.x, precision, battery:round.battery, friction:round.friction, losses:round.losses, assisted:round.assist};
-    best[mode] = Math.max(best[mode] || 0, precision);
-    api.award('regen', `experience-${mode}`, 20, `${modes[mode].name}体验`);
-    api.award('regen', 'parking-skill', (Object.values(best).reduce((s,v)=>s+(v||0),0)/3)*25, '停车技巧');
-    api.complete('regen'); save();
-    query('[data-result]').hidden = false; query('[data-breakdown]').hidden = true;
-    query('[data-result-title]').textContent = precision>.75 ? '停车漂亮，能量已记录！' : precision>0 ? '停进区域啦，再试试更靠近中心。' : '这圈体验完成，下一圈再调整时机。';
-    query('[data-result-copy]').textContent = `停在 ${round.x.toFixed(1)} m，目标中心 ${GOAL} m。回到电池 ${(round.battery/1000).toFixed(1)} kJ。`;
-    query('[data-round-status]').textContent = '体验已完成，可以看能量、换电池或再来一圈。';
-    updateUI();
-    setTimeout(() => { if (!disposed) api.saveImage('regen', stage.capture()); }, 90);
+  function updateUI(){
+    const config=REGEN_ROUTES[route],target=config.stops[Math.min(round.stopIndex,config.stops.length-1)];
+    const put=(s:string,t:string)=>q(s).textContent=t;
+    put('[data-mission]',config.goal);put('[data-speed]',`${(round.v*3.6).toFixed(0)} km/h`);put('[data-kinetic]',`${kj(kinetic(round.v))} kJ`);put('[data-recovered]',`${kj(round.recovered)} kJ`);put('[data-distance]',round.phase==='complete'?'已送达':`${Math.max(0,target.x-round.x).toFixed(0)} m`);
+    put('[data-deliveries]',`投递 ${round.deliveries.length} / ${config.stops.length}`);put('[data-status]',statusText());
+    put('[data-start]',round.phase==='delivery'?'继续投递 →':['complete','failed'].includes(round.phase)?'再出发 →':'出发，送快递 →');
+    q<HTMLButtonElement>('[data-start]').disabled=round.phase==='running';q<HTMLButtonElement>('[data-pause]').disabled=!['running','delivery'].includes(round.phase);put('[data-pause]',round.paused?'继续驾驶':'暂停');q('[data-retry]').hidden=round.phase!=='failed';q('[data-results-link]').hidden=!currentAttempt;
+    q<HTMLInputElement>('[data-handle]').value=String(ACTIONS.indexOf(round.action));q<HTMLInputElement>('[data-handle]').disabled=round.phase!=='running'||round.paused;
+    for(const button of host.querySelectorAll<HTMLButtonElement>('[data-control]')){button.setAttribute('aria-pressed',String(button.dataset.control===round.action));button.disabled=round.phase!=='running'||round.paused;}
+    put('[data-pace]',`限速 ${(config.speedLimit*3.6).toFixed(0)} km/h · 剩余 ${Math.max(0,Math.ceil(config.timeLimit-round.tick*DT))} s`);q('[data-pace]').classList.toggle('regen-speed-warning',round.v>config.speedLimit);
+    host.querySelectorAll<HTMLElement>('[data-route]').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.route)===route)));
+    for(let r=0;r<3;r++)put(`[data-best="${r}"]`,starText(bestStars[`${r}-${mode}`]||0));
+    const regen=round.power>.5,drive=round.drivePower>.5,full=acceptance(round)<MODES[mode].power*.95;
+    put('[data-live-state]',round.paused?'暂停，读数冻结':round.phase==='ready'?'等待出发':round.phase!=='running'?'本趟终值':regen?'正在回收':drive?'正在供能':'滑行 / 停车');
+    put('[data-flow-title]',regen?'车轮带动电机发电':drive?'电池供电，电机驱动车轮':round.frictionPower>1?'摩擦制动正在帮忙停车':'同一个电机，两种工作方式');
+    put('[data-mobile-flow]',regen?'动能回收：车轮 → 电机发电 → 电池':drive?'行驶供能：电池 → 电机驱动 → 车轮':round.frictionPower>1?'摩擦制动：运动能量 → 刹车盘摩擦 → 热':'滑行不主动回收，轻刹时观察电机发电');
+    host.querySelectorAll<HTMLElement>('[data-flow-arrow]').forEach(el=>el.textContent=regen?'→':drive?'←':'·');
+    put('[data-wheel-copy]',regen?'车轮经传动系统带动电机':drive?'电机带动车轮转动':'小车运动时具有动能');put('[data-motor-copy]',regen?'发电模式 · 点我':drive?'驱动模式 · 点我':'点我看转化原理');put('[data-battery-copy]',regen?mode==='cold'?'低温限制接收':full?'接近满电，少量接收':'电能存为化学能':full?'接近满电，接收受限':drive?'为下一段提供能量':'等待接收或供能');
+    put('[data-flow-copy]',regen?'运动中的小车带动电机发电，部分能量回到电池。发电产生的制动力帮助控速。':drive?'电池能量经电机转为机械能；回收到电池里的能量也能用于下一次出发。':round.brake>.1?(full?'电池接收能力受限；摩擦制动仍能安全停车。':'接近停止时回收变弱，摩擦制动补足。'):'本教学车型的滑行档不主动回收。车轮仍在转，不代表一定在充电。');
+    put('[data-heat-copy]',`运动能量 → 刹车盘摩擦 → 热 ${kj(round.frictionPower)} kW`);put('[data-power]',`${kj(round.power)} kW`);put('[data-soc]',`${soc(round).toFixed(3)}%`);
+    const gravity=MASS*GRAVITY*(terrainAt(config,0).height-terrainAt(config,round.x).height),total=round.drawn+gravity,values=[kinetic(round.v),round.recovered,round.friction,round.losses];
+    put('[data-source-energy]',`输入 ${kj(total)} kJ`);q('[data-ledger]').innerHTML=values.map((v,i)=>`<i class="${['kinetic','recovered','heat','loss'][i]}" style="width:${total>0?Math.max(0,v/total*100):0}%"></i>`).join('');
+    ['kinetic','recovered','heat','loss'].forEach((key,i)=>put(`[data-account-${key}]`,`${kj(values[i])} kJ`));
+    put('[data-height]',route===0?`输入来自电池 ${kj(round.drawn)} kJ；输出四项相加守恒。`:`电池输入 ${kj(round.drawn)} kJ + 高度下降提供 ${kj(gravity)} kJ。匀速下坡也可回收，动能不必一直减少。`);
+    put('[data-finding-saved]',finding?`我的发现：${finding}`:'完成一次实际对照，就能把自己的能量发现带走。');
+    put('[data-rules]',`本任务：初始电量 ${MODES[mode].soc}% · ${MODES[mode].temp}°C，限速 ${(config.speedLimit*3.6).toFixed(0)} km/h，时限 ${config.timeLimit} s；平稳阈值 0.28 rad，节能目标净耗电 ≤ ${kj(referenceEnergy(route,mode))} kJ。均为教学参数。`);
+    Object.assign(host.dataset,{phase:round.phase,running:String(round.phase==='running'&&!round.paused),paused:String(round.paused),x:round.x.toFixed(4),speed:round.v.toFixed(4),time:(round.tick*DT).toFixed(3),action:round.action,recovered:round.recovered.toFixed(4),drawn:round.drawn.toFixed(4),friction:round.friction.toFixed(4),losses:round.losses.toFixed(4),energyError:energyError(round).toFixed(6),assisted:String(round.assisted),deliveries:String(round.deliveries.length),mode,route:String(route)});
   }
-  function step(dt: number) {
-    if (!running) return;
-    round.elapsed += dt;
-    const previousV = round.speed;
-    const roadDecel = .18;
-    let demandedDecel = brake ? 3.0 : .8;
-    if (round.assist) demandedDecel = Math.min(4.5, Math.max(.25, round.speed*round.speed / (2*Math.max(.05,GOAL-round.x))));
-    if (round.x >= 108) demandedDecel = 5;
-    const nextV = Math.max(0, previousV-(demandedDecel+roadDecel)*dt);
-    const dx = .5*(previousV+nextV)*dt;
-    const removed = energy(previousV)-energy(nextV);
-    const roadLoss = Math.min(removed, MASS*roadDecel*dx);
-    const brakeWork = Math.max(0, removed-roadLoss);
-    // Mechanical input to regeneration is restricted by battery acceptance and conversion efficiency.
-    const efficiency = .76;
-    const regenMechanical = Math.min(brakeWork, modes[mode].power*dt/efficiency, MASS*1.3*dx);
-    const gained = regenMechanical*efficiency;
-    round.x += dx; round.speed = nextV;
-    round.battery += gained; round.friction += brakeWork-regenMechanical;
-    round.losses += roadLoss+(regenMechanical-gained); round.power = gained/dt;
-    if (nextV <= .001) finish();
+  function finish(){
+    if(finishedId===id)return;finishedId=id;markExperience();currentAttempt=makeAttempt(round,`${Date.now()}-${id}`);attempts=[...attempts,currentAttempt].slice(-6);
+    if(currentAttempt.stars>0){bestStars[`${route}-${mode}`]=Math.max(bestStars[`${route}-${mode}`]||0,currentAttempt.stars);if(route===0){manualBest[mode]=Math.max(manualBest[mode]||0,round.deliveries[0]?.precision||0);api.award('regen','parking-skill',modeIds.reduce((n,m)=>n+(manualBest[m]||0),0)/3*25,'手动停车技巧');}}
+    persist();q('[data-result]').hidden=false;q('[data-result-title]').textContent=round.phase==='complete'?`${REGEN_ROUTES[route].cargo}送到啦！`:'这次能量已记录，再调整一次';q('[data-result-stars]').textContent=starText(currentAttempt.stars);
+    q('[data-result-copy]').textContent=`${round.assisted?'教练示范 · ':round.practice?'片段练习 · ':''}${round.deliveries.length} 个站点送达，回到电池 ${kj(round.recovered)} kJ。${currentAttempt.stars===0?'体验积分保留，独立安全完成后可取得挑战星。':`送达 ✓ · ${round.maxSway<=.28?'货物平稳 ✓':'货物晃动较大'} · ${netEnergy(round)<=referenceEnergy(route,mode)?'净耗电达标 ✓':'可以再优化净耗电'}`}`;
+    q('[data-receipt]').innerHTML=[['驱动及辅助用电',round.drawn],['回到电池',round.recovered],['整趟净耗电',netEnergy(round)]].map(([label,value])=>`<div><span>${label}</span><b>${kj(Number(value))} <small>kJ</small></b></div>`).join('');
+    const prior=attempts.slice(0,-1).reverse().find(a=>comparable(a,currentAttempt!));
+    q('[data-strategy-comparison]').textContent=prior?`与相同任务、相同电池初态的上一趟相比：净耗电${netEnergy(round)<prior.drawn-prior.recovered?'减少':'增加'} ${kj(Math.abs(netEnergy(round)-(prior.drawn-prior.recovered)))} kJ。各站停车位置相差不超过 1 m；两趟终点 ${prior.x.toFixed(1)} / ${round.x.toFixed(1)} m。`:'再独立安全完成相同任务、同电池条件，各站停车位置相差不超过 1 m 时，可比较整趟净耗电。回收量更多不一定更省电。';
+    updateUI();const captureId=id;setTimeout(()=>{if(!disposed&&id===captureId&&finishedId===id)api.saveImage('regen',stage.capture());},120);if(route===0)showComparison('friction');
   }
-  const stage = createStage(query('.regen-stage'), { label:'新能源车刹停跑道和能量回收动画', width:1000, height:520,
-    update(dt) { if (document.hidden) return; accumulator += dt; while(accumulator>=1/120){step(1/120);accumulator-=1/120;} lastUi += dt; if(lastUi>.1){updateUI();lastUi=0;} },
-    draw(ctx, time) {
-      const gradient = ctx.createLinearGradient(0,0,0,520); gradient.addColorStop(0,'#e5efda'); gradient.addColorStop(1,'#f6f7e9'); ctx.fillStyle=gradient;ctx.fillRect(0,0,1000,520);
-      ctx.fillStyle='#fbfcec';ctx.beginPath();ctx.arc(813,91,40,0,Math.PI*2);ctx.fill();
-      for(let i=0;i<10;i++){const bx=i*117-35;const bh=38+(i*29)%72;roundRect(ctx,bx,220-bh,78,bh,4,i%2?'#d9e4c8':'#cdddbb');ctx.fillStyle='#edf2e1';for(let k=0;k<3;k++)for(let j=0;j<2;j++)ctx.fillRect(bx+12+k*19,230-bh+j*22,8,10);}
-      ctx.fillStyle='#bed09b';ctx.beginPath();ctx.moveTo(0,246);ctx.quadraticCurveTo(130,213,310,240);ctx.quadraticCurveTo(650,196,1000,245);ctx.lineTo(1000,290);ctx.lineTo(0,290);ctx.closePath();ctx.fill();
-      ctx.fillStyle='#dce6c4';ctx.fillRect(0,278,1000,100);ctx.fillStyle='#6e8158';ctx.fillRect(0,303,1000,66);
-      const mapX=(x:number)=>92+x*6.55;
-      const goalX=mapX(GOAL); ctx.fillStyle='#b4d67c';ctx.fillRect(goalX-90,303,180,66);
-      ctx.strokeStyle='#e7f2c9';ctx.lineWidth=3;ctx.setLineDash([13,10]);ctx.beginPath();ctx.moveTo(0,349);ctx.lineTo(1000,349);ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle='#f5f7e7';ctx.fillRect(goalX-4,309,8,27);
-      label(ctx,'绿色停车区',goalX-57,285,18,'#567738',600);
-      label(ctx,'终点中心 63 m',goalX-61,419,13,'#82936e');
-      for(let i=0;i<=120;i+=10){const x=mapX(i);ctx.strokeStyle='#aaba91';ctx.beginPath();ctx.moveTo(x,371);ctx.lineTo(x,378);ctx.stroke();if(i%20===0)label(ctx,`${i} m`,x-13,400,11,'#93a17e');}
-      const carX=mapX(round.x), vehicle=api.getVehicle(); drawCar(ctx,carX,305,vehicle.color,.77,round.x*.35,vehicle.body);
-      if(brake&&running){ctx.strokeStyle='#eec381';ctx.lineWidth=3;for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(carX-89-i*8,315);ctx.lineTo(carX-75-i*8,318);ctx.stroke();}}
-      if(running&&round.power>1){ctx.strokeStyle='#a6be65';ctx.lineWidth=2;ctx.setLineDash([6,8]);ctx.lineDashOffset=-time*36;ctx.beginPath();ctx.moveTo(carX+20,276);ctx.quadraticCurveTo(carX+54,230,carX+3,227);ctx.stroke();ctx.setLineDash([]);for(let i=0;i<4;i++){const phase=(time*.8+i*.25)%1;ctx.fillStyle='#8faa44';ctx.beginPath();ctx.arc(carX+12+36*Math.sin(phase*Math.PI),270-phase*41,3,0,Math.PI*2);ctx.fill();}roundRect(ctx,carX-27,204,57,23,6,'#f6fae8','#c2d595');label(ctx,`${(round.power/1000).toFixed(1)} kW`,carX-20,220,11,'#7a953f',700);}
-      roundRect(ctx,28,24,208,59,13,'#fffdf6b8','#d1dfbe');label(ctx,'本轮电池',44,46,11,'#889775');label(ctx,modes[mode].name,44,67,17,'#607742',700);label(ctx,`${modes[mode].temp}°C  /  SOC ${modes[mode].soc}%`,117,67,10,'#8c9c7a');
-      label(ctx,'能量账本',34,453,13,'#627a46',700);
-      const remaining=energy(round.speed), values=[round.battery,round.friction,round.losses,remaining];const colors=['#9ab951','#d8aa7b','#bcc6a7','#728b56'];let ex=144;
-      for(let i=0;i<values.length;i++){const w=values[i]/round.initial*558;if(w>.2){roundRect(ctx,ex,436,w,22,0,colors[i]);ex+=w;}}
-      const names=['回到电池','摩擦热','其他损耗','仍在运动'];for(let i=0;i<4;i++){ctx.fillStyle=colors[i];ctx.beginPath();ctx.arc(161+i*140,482,4,0,Math.PI*2);ctx.fill();label(ctx,names[i],173+i*140,486,11,'#879776');}
-      roundRect(ctx,759,431,212,67,12,'#fffdf4b8','#dae3c8');label(ctx,'初始运动能量',777,453,11,'#8b9b79');label(ctx,`${(round.initial/1000).toFixed(1)} kJ`,777,481,22,'#607a42',700);
-    }
-  });
-  function start() { round=newRound(mode);running=true;brake=false;accumulator=0;query('[data-result]').hidden=true;query('[data-breakdown]').hidden=true;query('[data-round-status]').textContent='靠近绿色区域时按住刹车，也可以试试辅助停车。';updateUI(); }
-  query('[data-start]').addEventListener('click',start);
-  for(const button of host.querySelectorAll<HTMLButtonElement>('[data-mode]')) button.addEventListener('click',()=>{
-    mode=button.dataset.mode as Mode;running=false;brake=false;round=newRound(mode);query('[data-result]').hidden=true;query('[data-breakdown]').hidden=true;
-    host.querySelectorAll('[data-mode]').forEach(el=>el.classList.toggle('active',(el as HTMLElement).dataset.mode===mode));
-    query('[data-mode-description]').textContent=modes[mode].description;query('[data-round-status]').textContent='新电池已装好，按“出发”开始体验。';updateUI();
-  });
-  const brakeButton=query<HTMLButtonElement>('[data-brake]');
-  const release=()=>{brake=false;updateUI();};
-  brakeButton.addEventListener('pointerdown',event=>{if(!running)return;brake=true;round.assist=false;brakeButton.setPointerCapture(event.pointerId);event.preventDefault();updateUI();});
-  brakeButton.addEventListener('pointerup',release);brakeButton.addEventListener('pointercancel',release);brakeButton.addEventListener('lostpointercapture',release);
-  function keyDown(event: KeyboardEvent) { if(event.code==='Space'&&!['INPUT','TEXTAREA','SELECT'].includes((event.target as HTMLElement)?.tagName)){event.preventDefault();if(running){brake=true;round.assist=false;updateUI();}} }
-  function keyUp(event: KeyboardEvent){if(event.code==='Space')release();}
-  const blur=()=>{release();};
-  window.addEventListener('keydown',keyDown);window.addEventListener('keyup',keyUp);window.addEventListener('blur',blur);
-  query('[data-assist]').addEventListener('click',()=>{if(!running)start();round.assist=true;brake=false;api.notify('辅助停车已开启，观察车速和能量的变化。');});
-  query('[data-energy-view]').addEventListener('click',()=>{
-    query('[data-breakdown]').hidden=false;query('[data-battery-account]').textContent=`${(round.battery/1000).toFixed(1)} kJ`;query('[data-friction-account]').textContent=`${(round.friction/1000).toFixed(1)} kJ`;query('[data-loss-account]').textContent=`${(round.losses/1000).toFixed(1)} kJ`;
-    if(!seen.includes(mode))seen.push(mode);api.award('regen',`energy-view-${mode}`,5,`${modes[mode].name}能量探索`);save();
-  });
-  updateUI();
-  return {destroy(){disposed=true;running=false;stage.destroy();window.removeEventListener('keydown',keyDown);window.removeEventListener('keyup',keyUp);window.removeEventListener('blur',blur);}};
+  function showComparison(kind:'friction'|'battery'){
+    const source=currentAttempt;if(!source)return;const states=kind==='friction'?[replayRegen(source,source.mode,true),replayRegen(source,source.mode,false)]:modeIds.map(m=>replayRegen(source,m,true));
+    const firstRecovery=states[0].frames.find(f=>f.recovered>100)?.t||0;
+    replay={source,states,time:Math.max(0,firstRecovery-.5),playing:!api.reducedMotion(),kind};q('[data-comparison]').hidden=false;q('[data-comparison-title]').textContent=kind==='friction'?'相同路线、相同操作，能量去向不同':'相同路线与操作，只改变起始电池条件';
+    const config=REGEN_ROUTES[source.route],end=config.stops.at(-1)!.x+20;
+    q('[data-replay-lanes]').innerHTML=states.map((_,i)=>`<div class="regen-replay-lane"><div><strong>${kind==='friction'?(i===0?'再生制动参与':'仅摩擦制动'):MODES[modeIds[i]].name}</strong><span data-replay-values="${i}"></span></div><div class="regen-replay-road"><span data-ghost="${i}">▰</span>${config.stops.map(stop=>`<i style="left:${stop.x/end*96}%" title="${stop.name}"></i>`).join('')}</div><div class="regen-replay-energy" data-replay-energy="${i}"></div></div>`).join('');
+    const on=states[0],off=states[1];q('[data-comparison-copy]').textContent=kind==='friction'?`本次${source.assisted?'示范':'操作'}回收 ${kj(on.recovered)} kJ；仅摩擦制动回收 ${kj(off.recovered)} kJ。两车最终停在 ${on.x.toFixed(2)} / ${off.x.toFixed(2)} m。能量经电机回到电池，另有转换损耗；并不是全部摩擦热都能回收。`:`常温 / 低温 / 满电出发分别回收 ${states.map(s=>kj(s.recovered)).join(' / ')} kJ。满电先消耗出余量后，也可能恢复少量回收。制动需求相同，摩擦制动补足不同的部分。`;
+    if(!seen.includes(source.mode))seen.push(source.mode);api.award('regen',`energy-view-${source.mode}`,5,`${MODES[source.mode].name}能量探索`);persist();renderReplay();
+  }
+  function renderReplay(){
+    if(!replay)return;const duration=replay.source.ticks*DT;q<HTMLInputElement>('[data-replay]').value=String(Math.round(replay.time/duration*1000));q('[data-replay-play]').textContent=replay.playing?'暂停重放':'播放重放';
+    replay.states.forEach((s,i)=>{const f=s.frames.find(f=>f.t>=replay!.time)||s.frames.at(-1);if(!f)return;q(`[data-replay-values="${i}"]`).textContent=`${f.t.toFixed(1)} s · 回收 ${kj(f.recovered)} kJ · 摩擦热 ${kj(f.friction)} kJ`;q(`[data-ghost="${i}"]`).style.left=`${Math.min(96,f.x/(REGEN_ROUTES[s.route].stops.at(-1)!.x+20)*96)}%`;
+      const total=f.drawn+MASS*GRAVITY*(terrainAt(REGEN_ROUTES[s.route],0).height-f.height),values=[kinetic(f.v),f.recovered,f.friction,f.losses];q(`[data-replay-energy="${i}"]`).innerHTML=values.map((v,j)=>`<i class="${['kinetic','recovered','heat','loss'][j]}" style="width:${total>0?Math.max(0,v/total*100):0}%"></i>`).join('');});
+  }
+  const stage=createStage(q('.regen-stage'),{width:1000,height:410,label:'回能快递员：车辆、货物、站点和实时能量流',
+    update(dt){if(document.hidden)return;if(replay?.playing){replay.time=Math.min(replay.source.ticks*DT,replay.time+dt*2);if(replay.time>=replay.source.ticks*DT)replay.playing=false;renderReplay();}
+      if(round.phase==='delivery'&&coaching&&!round.paused){deliveryAge+=dt;if(deliveryAge>1.2)depart();}
+      if(round.phase==='running'&&!round.paused){accumulator+=dt;while(accumulator>=DT){if(coaching&&round.tick%12===0)setRegenAction(round,suggestedAction(round));stepRegen(round);accumulator-=DT;const phase=round.phase as RegenState['phase'];if(phase==='delivery'){markExperience();deliveryAge=0;persist('进行中：已送达一站，等待继续投递。');accumulator=0;break;}if(phase==='complete'||phase==='failed'){finish();accumulator=0;break;}}}
+      lastUI+=dt;if(lastUI>.09){updateUI();lastUI=0;}},draw(ctx,time){drawRegen(ctx,time,round,api);}});
+  q('[data-start]').addEventListener('click',depart);q('[data-pause]').addEventListener('click',()=>{if(round.paused){round.paused=false;accumulator=0;updateUI();}else pause();});
+  q('[data-results-link]').addEventListener('click',()=>q('[data-result]').scrollIntoView({behavior:api.reducedMotion()?'instant':'smooth',block:'start'}));
+  host.querySelectorAll<HTMLButtonElement>('[data-control]').forEach(button=>button.addEventListener('click',()=>{temporaryBrake=false;act(button.dataset.control as RegenAction);}));
+  q<HTMLInputElement>('[data-handle]').addEventListener('input',e=>act(ACTIONS[Number((e.target as HTMLInputElement).value)]));
+  host.querySelectorAll<HTMLButtonElement>('[data-route]').forEach(button=>button.addEventListener('click',()=>reset(Number(button.dataset.route))));q<HTMLSelectElement>('[data-battery]').addEventListener('change',e=>reset(route,(e.target as HTMLSelectElement).value as RegenMode));
+  q('[data-restart]').addEventListener('click',()=>reset());q('[data-again]').addEventListener('click',()=>{reset();depart();});q('[data-next-task]').addEventListener('click',()=>reset((route+1)%3));
+  q('[data-retry]').addEventListener('click',()=>{round=structuredClone(checkpoint);round.practice=true;round.assisted=false;round.phase='running';round.paused=false;id++;finishedId=-1;accumulator=0;replay=null;currentAttempt=null;temporaryBrake=false;coaching=false;q('[data-result]').hidden=true;q('[data-comparison]').hidden=true;persist('进行中：重试当前路段，保留前段能量账本。');updateUI();});
+  q('[data-assist]').addEventListener('click',()=>{if(round.phase!=='running'){if(round.phase!=='delivery')reset();depart();}round.assisted=true;coaching=true;round.paused=false;api.notify('教练使用相同模型示范；本趟保留体验，不计手动星级。');updateUI();});
+  q('[data-motor]').addEventListener('click',()=>{const detail=q('#regen-motor-explanation');detail.hidden=!detail.hidden;q('[data-motor]').setAttribute('aria-expanded',String(!detail.hidden));});
+  q('[data-compare]').addEventListener('click',()=>showComparison('friction'));q('[data-compare-battery]').addEventListener('click',()=>showComparison('battery'));
+  q('[data-replay-play]').addEventListener('click',()=>{if(!replay)return;if(replay.time>=replay.source.ticks*DT)replay.time=0;replay.playing=!replay.playing;renderReplay();});q<HTMLInputElement>('[data-replay]').addEventListener('input',e=>{if(!replay)return;replay.playing=false;replay.time=Number((e.target as HTMLInputElement).value)/1000*replay.source.ticks*DT;renderReplay();});
+  q('[data-finding]').addEventListener('click',()=>{if(!replay)return;finding=q('[data-comparison-copy]').textContent||'';findingSource=`${REGEN_ROUTES[replay.source.route].name} · ${replay.source.id} · ${replay.kind==='friction'?'回收与摩擦对照':'三种电池对照'}`;persist();updateUI();api.notify('这次实际能量发现已写进作品报告。');});
+  q('[data-save]').addEventListener('click',()=>{if(round.tick===0&&!currentAttempt){api.notify('先出发体验，再保存自己的作品。');return;}persist(round.phase==='running'||round.phase==='delivery'?`进行中：${REGEN_ROUTES[route].name}，当前回收 ${kj(round.recovered)} kJ，尚未完成本趟。`:undefined);api.saveImage('regen',stage.capture());api.notify('实际画面与能量记录已保存到我的作品。');});
+  function keydown(e:KeyboardEvent){const target=e.target as HTMLElement;if(['INPUT','TEXTAREA','SELECT','A','SUMMARY'].includes(target?.tagName)||round.phase!=='running'||round.paused)return;if(target?.tagName==='BUTTON'&&!host.contains(target))return;if(['Digit1','Digit2','Digit3','Digit4'].includes(e.code)){e.preventDefault();act(ACTIONS[Number(e.code.at(-1))-1]);}if(e.code==='Space'&&!e.repeat&&target?.tagName!=='BUTTON'){e.preventDefault();previousAction=round.action;temporaryBrake=true;act('hard');}}
+  function keyup(e:KeyboardEvent){if(e.code==='Space'&&temporaryBrake){e.preventDefault();temporaryBrake=false;act(previousAction);}}
+  const visibility=()=>{if(document.hidden){pause();if(replay)replay.playing=false;}},blur=()=>{pause();if(replay)replay.playing=false;};
+  window.addEventListener('keydown',keydown);window.addEventListener('keyup',keyup);window.addEventListener('blur',blur);document.addEventListener('visibilitychange',visibility);host.addEventListener('pointercancel',pause);updateUI();
+  return {destroy(){disposed=true;if(round.phase==='running'||round.phase==='delivery')persist(`未完成：${REGEN_ROUTES[route].name}，离开时回收 ${kj(round.recovered)} kJ。`);round.paused=true;stage.destroy();window.removeEventListener('keydown',keydown);window.removeEventListener('keyup',keyup);window.removeEventListener('blur',blur);document.removeEventListener('visibilitychange',visibility);host.removeEventListener('pointercancel',pause);}};
 }

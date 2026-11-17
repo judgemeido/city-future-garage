@@ -15,6 +15,7 @@ export function createStage(parent: HTMLElement, options: StageOptions) {
   let disposed = false;
   let density = getDensity();
   let scene: ExperienceScene | undefined;
+  let releasePointer = () => {};
   function getDensity() {
     const cssWidth = parent.getBoundingClientRect().width || width;
     const requested = cssWidth * (window.devicePixelRatio || 1) / width;
@@ -29,9 +30,34 @@ export function createStage(parent: HTMLElement, options: StageOptions) {
       scene = this;
       this.texture = this.textures.createCanvas('world', Math.round(width * density), Math.round(height * density))!;
       this.view = this.add.image(0, 0, 'world').setOrigin(0);
-      for (const [event, kind] of [['pointermove', 'move'], ['pointerdown', 'down'], ['pointerup', 'up']] as const) {
-        this.input.on(event, (p: Phaser.Input.Pointer) => options.pointer?.(kind, p.x * width / this.texture.width, p.y * height / this.texture.height));
-      }
+      const canvas = this.game.canvas;
+      let activePointer: number | undefined;
+      const dispatch = (kind: 'move' | 'down' | 'up', event: PointerEvent) => {
+        const bounds = canvas.getBoundingClientRect();
+        options.pointer?.(kind, (event.clientX - bounds.left) * width / bounds.width, (event.clientY - bounds.top) * height / bounds.height);
+      };
+      canvas.addEventListener('pointerdown', event => {
+        if (activePointer !== undefined || event.button !== 0) return;
+        activePointer = event.pointerId; canvas.setPointerCapture(event.pointerId);
+        dispatch('down', event); event.preventDefault();
+      });
+      canvas.addEventListener('pointermove', event => {
+        if (activePointer === undefined || activePointer === event.pointerId) dispatch('move', event);
+      });
+      const release = (event: PointerEvent) => {
+        if (activePointer !== event.pointerId) return;
+        activePointer = undefined; dispatch('up', event);
+      };
+      canvas.addEventListener('pointerup', release);
+      canvas.addEventListener('pointercancel', () => releasePointer());
+      canvas.addEventListener('lostpointercapture', () => releasePointer());
+      releasePointer = () => {
+        if (activePointer === undefined) return;
+        const id = activePointer; activePointer = undefined;
+        // An off-stage release cancels a connection instead of snapping stale coordinates.
+        options.pointer?.('up', -1000, -1000);
+        if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id);
+      };
       this.game.canvas.setAttribute('aria-label', options.label);
       this.game.canvas.setAttribute('role', 'img');
       // Let the parent's aspect ratio own layout. Inline Phaser sizes can stretch the
@@ -83,19 +109,23 @@ export function createStage(parent: HTMLElement, options: StageOptions) {
   const observer = new ResizeObserver(resize);
   observer.observe(parent);
   window.addEventListener('resize', resize);
+  const blur = () => releasePointer();
+  const visibility = () => { if (document.hidden) releasePointer(); };
+  window.addEventListener('blur', blur);
+  document.addEventListener('visibilitychange', visibility);
   return {
     capture: () => {
-      // Detailed report images remain bounded so four high-DPI captures fit in browser storage.
-      const ratio = Math.min(1, 1800 / game.canvas.width);
+      // Eight report captures share the local-storage budget with structured records.
+      const ratio = Math.min(1, 1200 / game.canvas.width);
       const image = document.createElement('canvas');
       image.width = Math.round(game.canvas.width * ratio);
       image.height = Math.round(game.canvas.height * ratio);
       const ctx = image.getContext('2d')!;
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(game.canvas, 0, 0, image.width, image.height);
-      return image.toDataURL('image/jpeg', .92);
+      return image.toDataURL('image/jpeg', .82);
     },
-    destroy: () => { disposed = true; observer.disconnect(); window.removeEventListener('resize', resize); game.destroy(true); }
+    destroy: () => { releasePointer(); disposed = true; observer.disconnect(); window.removeEventListener('resize', resize); window.removeEventListener('blur', blur); document.removeEventListener('visibilitychange', visibility); game.destroy(true); }
   };
 }
 export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, radius = 12, fill?: string, stroke?: string) {

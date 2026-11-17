@@ -1,2 +1,5 @@
 # Keep downloaded vector sources byte-stable across Windows and Unix checkouts.
 *.svg text eol=lf
+
+# Preserve the offline release checksum across checkouts.
+城市未来车厂-双击打开.html -text
