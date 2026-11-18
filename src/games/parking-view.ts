@@ -8,10 +8,10 @@ function line(ctx:CanvasRenderingContext2D,points:Point[],color:string,width=2,c
 function arrow(ctx:CanvasRenderingContext2D,p:Pose,color:string,size=10){ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.angle);line(ctx,[{x:-size,y:-size*.6},{x:0,y:0},{x:-size,y:size*.6}],color,2);ctx.restore();}
 export function drawParkingCar(ctx:CanvasRenderingContext2D,p:Pose,color:string,body:string,steer=0,ghost=false){
   const c=carCenter(p);ctx.save();ctx.translate(c.x,c.y);ctx.rotate(p.angle);ctx.globalAlpha=ghost?.35:1;
-  if(!ghost){ctx.shadowColor=color+'50';ctx.shadowBlur=12;}roundRect(ctx,-40,-21,80,42,6,ghost?color+'18':'#0a1829',color);ctx.shadowBlur=0;
-  ctx.save();ctx.scale(.82,.70);drawPremiumTopCar(ctx,0,0,color,1,body);ctx.restore();
-  for(const side of [-1,1]){ctx.save();ctx.translate(30,side*17);ctx.rotate(steer);roundRect(ctx,-8,-3,16,6,2,'#061320',ghost?color:'#edf7fc');ctx.restore();}
-  line(ctx,[{x:25,y:-7},{x:33,y:0},{x:25,y:7}],'#f6ffff',2);ctx.restore();
+  ctx.save();ctx.strokeStyle=ghost?color:color+'66';ctx.lineWidth=1.2;ctx.setLineDash([4,4]);roundRect(ctx,-40,-21,80,42,8,ghost?color+'14':'rgba(10,24,41,0.28)',ghost?color:color+'66');ctx.setLineDash([]);ctx.restore();
+  for(const side of [-1,1]){ctx.save();ctx.translate(23,side*16.5);ctx.rotate(steer);roundRect(ctx,-7,-2.6,14,5.2,2,'#061320',ghost?color:'#7fe8ff');ctx.restore();}
+  ctx.save();ctx.scale(.86,.82);drawPremiumTopCar(ctx,0,0,color,1,body);ctx.restore();
+  line(ctx,[{x:32,y:-5},{x:38,y:0},{x:32,y:5}],'#c8ffff',1.8);ctx.restore();
 }
 export function drawParking(ctx:CanvasRenderingContext2D,v:ParkingView){
   ctx.fillStyle='#0a1627';ctx.fillRect(0,0,1000,560);
@@ -24,8 +24,8 @@ export function drawParking(ctx:CanvasRenderingContext2D,v:ParkingView){
   arrow(ctx,{x:120,y:190,angle:0},'#b2cbda66',18);label(ctx,'起点',v.level.start.x-28,v.level.start.y-43,13,'#8fb4c8');
   for(const o of v.level.obstacles){
     if(o.kind==='car'){
-      roundRect(ctx,o.x-o.w/2-8,o.y-o.h/2-8,o.w+16,o.h+16,5,'#24364b','#65768a');
-      ctx.save();ctx.translate(o.x,o.y);if(o.h>o.w)ctx.rotate(Math.PI/2);ctx.scale(Math.max(o.w,o.h)/96,Math.min(o.w,o.h)/58);drawPremiumTopCar(ctx,0,0,'#8091a9',1,'touring');ctx.restore();
+      roundRect(ctx,o.x-o.w/2-6,o.y-o.h/2-6,o.w+12,o.h+12,6,'rgba(22,38,58,0.45)','#49657d');
+      ctx.save();ctx.translate(o.x,o.y);if(o.h>o.w)ctx.rotate(Math.PI/2);ctx.scale(Math.max(o.w,o.h)/92,Math.min(o.w,o.h)/48);drawPremiumTopCar(ctx,0,0,'#7b92ad',1,'touring');ctx.restore();
     }else{
       roundRect(ctx,o.x-o.w/2,o.y-o.h/2,o.w,o.h,5,o.kind==='pillar'?'#725a4b':'#253e48',o.kind==='pillar'?amber:'#63827d');
       if(o.kind==='pillar'){line(ctx,[{x:o.x-o.w/2+3,y:o.y+o.h/2-3},{x:o.x+o.w/2-3,y:o.y-o.h/2+3}],amber,4);}else for(let x=o.x-o.w/2+12;x<o.x+o.w/2-6;x+=22){ctx.fillStyle='#446861';ctx.beginPath();ctx.arc(x,o.y,6,0,7);ctx.fill();}

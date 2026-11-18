@@ -1,41 +1,638 @@
-import { GAME_COLORS } from '../theme';
-import { createStage, label, roundRect } from '../platform';
 import { drawPremiumTopCar } from '../car-art';
+import { createStage, label, roundRect } from '../platform';
 import type { GameAPI, MountedGame } from '../types';
-import { LabFX, LabJournal, badge, bindHold, clamp, glowLine, labBackground, labShell, type LabResult } from './lab';
-import { GRIP_ROAD, GRIP_SCENES, createGrip, gripDifference, replayGrip, stepGrip, type GripFrame, type GripState } from './grip-model';
+import {
+  GRIP_RACE_DT,
+  RACE_TIRES,
+  RAIN_COURSES,
+  ROAD_HALF_WIDTH,
+  createGripRace,
+  rainAdvice,
+  rainFriction,
+  rainRoad,
+  rainStars,
+  rainTimeLimit,
+  rescueGripRace,
+  stepGripRace,
+  type GripRace,
+  type RaceTire,
+} from './grip-race-model';
+import './arcade-science.css';
 
-const COLOR=GAME_COLORS.grip,ORANGE='#efad72';
-export function mountGrip(host:HTMLElement,api:GameAPI):MountedGame {
-  const ui=labShell(host,{id:'grip',color:COLOR,tag:'08 / GRIP · 双车对照',scenes:GRIP_SCENES.map(s=>s.name),goals:['观察：只改变路面，两车轨迹有什么不同？','观察：同样湿路，速度改变会怎样？','观察：其余条件固定，只改变轮胎。'],toolbar:'<label class="lab-slider"><span data-variable>路面湿润</span><input data-variable-slider type="range" min="0" max="100" value="75" step="1" aria-label="本关实验变量"><output data-value>75%</output></label><button class="btn btn-primary lab-hold" data-hold>按住双车出发 · 空格</button><button class="btn" data-toggle>开始 / 暂停</button><div class="lab-metrics"><span>时间 <strong data-time>0.0 s</strong></span><span>轨迹差 <strong data-diff>0.0 m</strong></span></div>',tools:'<p>蓝车是基准，橙车只改变本关一个变量。按住推进，松手暂停。拖画面下方回放光点定位真实帧；运行中改条件会保留旧轨迹并开始新一轮。</p><label class="lab-slider">同步回放 <input data-replay-slider type="range" min="0" max="1000" value="1000" step="1" aria-label="双车轨迹回放"><output data-replay-value>最新帧</output></label><p>三星：完成实验、橙车未驶出道路；两星：完成且最多一次驶出；一星：完成一次对照。蓝车和橙车使用同一转向指令序列，参数为便于观察的教学设置。</p>',cards:[{title:'轮胎与路面',text:'轮胎和路面间的摩擦支持转向、加速与制动。路面湿润或轮胎条件改变，会影响能完成的转向动作；这里用简化抓地上限模拟。',source:'S6 · FHWA 路面摩擦',url:'https://highways.dot.gov/sites/fhwa.dot.gov/files/2023-06/FHWA%20Pavement%20Friction%20for%20Road%20Safety%20Primer.pdf'},{title:'条件匹配',text:'湿路上需要根据条件调整速度。双车收到同一组转向指令，速度高时可能需要更多抓地力，观察橙色轨迹是否仍在道路内。',source:'S8 · FHWA 雨天驾驶',url:'https://highways.dot.gov/safety/speed-management/guidelines-use-variable-speed-limit-systems-wet-weather/chapter-2-driver'},{title:'只改一项',text:'比较路面时固定轮胎、速度和输入；比较速度或轮胎时也固定其余条件。这样才能把本次差异与改变的那一项联系起来。',source:'S7 · NHTSA 轮胎',url:'https://www.nhtsa.gov/vehicle-safety/tires'}]});
-  const journal=new LabJournal('grip',api,host,ui.media.evidence),fx=new LabFX(api.reducedMotion);
-  let state=createGrip(0),running=false,history:GripState|null=null,fraction=1,replaying=false,dragReplay=false,sliding=false,accumulator=0;
-  const toScreen=(p:{x:number;y:number})=>({x:115+p.x*3.6,y:401-p.y*3.6});
-  const replayX=()=>160+fraction*680;
-  function updateUI(){const config=GRIP_SCENES[state.scene],frame=replayGrip(state,fraction);ui.media.signal({position:replaying?fraction:(state.value-config.min)/(config.max-config.min),text:`教学实验：${config.variable} ${state.value}${config.unit} · ${replaying?'回放 '+frame.time.toFixed(1)+' s':running?'双车运行':'已暂停'}`});ui.q('[data-variable]').textContent=config.variable;ui.q<HTMLInputElement>('[data-variable-slider]').min=String(config.min);ui.q<HTMLInputElement>('[data-variable-slider]').max=String(config.max);ui.q<HTMLInputElement>('[data-variable-slider]').value=String(state.value);ui.q('[data-value]').textContent=`${state.value}${config.unit}`;ui.q('[data-time]').textContent=`${(replaying?frame.time:state.time).toFixed(1)} s`;ui.q('[data-diff]').textContent=`${(replaying?Math.hypot(frame.a.x-frame.b.x,frame.a.y-frame.b.y):gripDifference(state)).toFixed(1)} m`;ui.q<HTMLInputElement>('[data-replay-slider]').value=String(Math.round(fraction*1000));ui.q('[data-replay-value]').textContent=replaying?`${frame.time.toFixed(2)} s`:'最新帧';host.dataset.time=state.time.toFixed(3);host.dataset.running=String(running);host.dataset.value=String(state.value);host.dataset.replayTime=frame.time.toFixed(3);host.dataset.replayX=String(replayX());host.dataset.difference=gripDifference(state).toFixed(4);host.dataset.finished=String(state.ended);host.dataset.hasHistory=String(!!history);}
-  function result():LabResult {const config=GRIP_SCENES[state.scene],c=state.conditions;const isDifferent=state.scene===0?c.a.wet!==c.b.wet:state.scene===1?c.a.speed!==c.b.speed:c.a.tire!==c.b.tire;const diff=gripDifference(state);return {scene:state.scene,name:config.name,success:state.ended,stars:state.ended?(state.b.outsideCount===0?3:state.b.outsideCount===1?2:1):0,changed:`只改${config.variable}：基准 ${state.scene===0?0:state.scene===1?30:100}${config.unit}，实验 ${state.value}${config.unit}`,observed:`同一转向指令下，终点相距 ${diff.toFixed(1)} m；橙车驶出道路 ${state.b.outsideCount} 次`,learned:diff>.1?'抓地力限制转向，条件变化会改变实际轨迹。':'本次条件仍有足够抓地力，两车能完成相同转向。',facts:[{label:'固定条件',value:state.scene===0?'同一车型 / 30 km/h / 同一轮胎 / 同一输入':state.scene===1?'同一车型 / 70%湿路 / 同一轮胎 / 同一输入':'同一车型 / 70%湿路 / 30 km/h / 同一输入'},{label:'双车实验时间',value:`${state.time.toFixed(1)} s`},{label:'蓝车 / 橙车驶出道路',value:`${state.a.outsideCount} / ${state.b.outsideCount} 次`}],conditions:{variable:config.variable,value:state.value,wetA:c.a.wet,wetB:c.b.wet,speedA:c.a.speed,speedB:c.b.speed,tireA:c.a.tire,tireB:c.b.tire},outcome:{difference:diff,outside:state.b.outsideCount},comparison:state.ended&&isDifferent?`${config.variable}从 ${state.scene===0?0:state.scene===1?30:100} 改为 ${state.value}${config.unit}，同一输入产生 ${diff.toFixed(1)} m 终点差；其余条件相同。`:undefined};}
-  const hold=bindHold(ui.q<HTMLButtonElement>('[data-hold]'),ui.q<HTMLButtonElement>('[data-toggle]'),value=>{if(value&&replaying){state.a={...state.frames.at(-1)!.a};state.b={...state.frames.at(-1)!.b};replaying=false;fraction=1;}running=value&&!state.ended&&!dragReplay;if(running){journal.action();ui.status('双车正在用同一组转向指令前进；松手立即暂停。');}else if(!state.ended)ui.status('运动和计时已暂停。拖回放光点看差异，或按住继续。');updateUI();});
-  function reset(scene=state.scene,value=GRIP_SCENES[scene].default,keepHistory=false){hold.stop();if(keepHistory&&state.frames.length>1)history=structuredClone(state);else if(!keepHistory)history=null;state=createGrip(scene,value);fraction=1;replaying=dragReplay=false;accumulator=0;ui.q('[data-result]').hidden=true;ui.scene(scene);ui.status('拖一个实验滑块，看路面或车辆预览随手变化；按住双车出发。');updateUI();}
-  function replay(value:number){hold.stop();replaying=true;fraction=clamp(value,0,1);const frame=replayGrip(state,fraction);ui.status(`同步回放到 ${frame.time.toFixed(2)} s，两车位置取自真实记录帧，不重新计分。`);updateUI();}
-  function car(ctx:CanvasRenderingContext2D,p:GripFrame['a'],color:string,zoom=1,origin?:{x:number;y:number}){const point=origin||toScreen(p);ctx.save();ctx.translate(point.x,point.y);ctx.rotate(-p.angle);drawPremiumTopCar(ctx,0,0,color,.52*zoom,api.getVehicle().body);ctx.restore();}
-  const stage=createStage(ui.q('.lab-stage'),{width:1000,height:500,label:'雨天双车同条件轨迹、实时路面预览和同步回放放大窗',
-    pointer(kind,x,y){if(kind==='down'&&Math.abs(y-458)<38&&x>120&&x<890){dragReplay=true;replay((x-160)/680);fx.pulse(x,458,COLOR);}if(kind==='move'&&dragReplay)replay((x-160)/680);if(kind==='up'&&dragReplay){dragReplay=false;ui.status('回放已停在当前帧，两车位置与局部放大保留。');updateUI();}},
-    update(dt){fx.step(dt);if(running&&!document.hidden){accumulator+=dt;while(accumulator>=1/120&&running){accumulator-=1/120;stepGrip(state,1/120);if(state.ended){hold.stop();api.record('grip',{trajectory:state.frames.filter((_,i)=>i%12===0||i===state.frames.length-1),conditions:state.conditions});journal.finish(result());fx.pulse(toScreen(state.b).x,toScreen(state.b).y,ORANGE);ui.status('双车轨迹已记录，拖回放光点看差异，再保存自己的发现。');}}}else accumulator=0;updateUI();},
-    draw(ctx,time){labBackground(ctx,COLOR,'蓝色基准车 / 橙色实验车 · 同一组转向输入');const road=GRIP_ROAD.map(toScreen);ctx.strokeStyle='#385976';ctx.lineWidth=52;ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();ctx.moveTo(road[0].x,road[0].y);for(const p of road.slice(1))ctx.lineTo(p.x,p.y);ctx.stroke();ctx.strokeStyle='#182b44';ctx.lineWidth=44;ctx.stroke();
-      const wet=state.conditions.b.wet;ctx.save();ctx.globalAlpha=wet*.8;ctx.strokeStyle='#4e6f9f';ctx.lineWidth=42;ctx.stroke();ctx.globalAlpha=wet*.45;ctx.strokeStyle='#47eaff';ctx.lineWidth=2;ctx.setLineDash([9,12]);ctx.stroke();ctx.setLineDash([]);ctx.restore();
-      ctx.strokeStyle='#b4d9e591';ctx.lineWidth=2;ctx.setLineDash([10,13]);ctx.beginPath();ctx.moveTo(road[0].x,road[0].y);for(const p of road.slice(1))ctx.lineTo(p.x,p.y);ctx.stroke();ctx.setLineDash([]);
-      if(wet>0){const boundary=wet*860;ctx.save();ctx.beginPath();ctx.rect(55,70,boundary,340);ctx.clip();for(let i=0;i<28;i++){const x=85+(i*73)%850,y=93+(i*47)%295;ctx.strokeStyle=`rgba(173,223,247,${wet*.35})`;ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(x,y,9+wet*6,3,0,0,Math.PI*2);ctx.stroke();if((running||sliding)&&!api.reducedMotion()){const offset=(time*80+i*11)%45;ctx.beginPath();ctx.moveTo(x+offset*.1,y-offset);ctx.lineTo(x+offset*.1-3,y-offset+10);ctx.stroke();}}ctx.restore();badge(ctx,`湿润覆盖 ${Math.round(wet*100)}%`,690,84,COLOR);}
-      if(history){ctx.save();ctx.globalAlpha=.18;glowLine(ctx,history.frames.filter((_,i)=>i%6===0).map(f=>toScreen(f.b)),ORANGE,2);ctx.restore();label(ctx,'上轮实际轨迹（淡色）',690,120,11,'#b7b6a7');}
-      const frames=state.frames.filter((_,i)=>i%4===0);glowLine(ctx,frames.map(f=>toScreen(f.a)),COLOR,3);glowLine(ctx,frames.map(f=>toScreen(f.b)),ORANGE,3);const frame=replaying?replayGrip(state,fraction):state.frames.at(-1)!;
-      car(ctx,frame.a,COLOR);car(ctx,frame.b,ORANGE);const a=toScreen(frame.a),b=toScreen(frame.b);if(Math.hypot(a.x-b.x,a.y-b.y)<35){ctx.strokeStyle=COLOR;ctx.lineWidth=2;ctx.beginPath();ctx.arc(a.x,a.y,34,Math.PI/2,Math.PI*1.5);ctx.stroke();ctx.strokeStyle=ORANGE;ctx.beginPath();ctx.arc(b.x,b.y,34,-Math.PI/2,Math.PI/2);ctx.stroke();}
-      if(running&&!api.reducedMotion()){for(const [p,c] of [[a,COLOR],[b,ORANGE]] as const){for(let i=0;i<7;i++){const phase=(time*3+i/7)%1;ctx.globalAlpha=(1-phase)*.6;ctx.fillStyle=c;ctx.beginPath();ctx.arc(p.x-30-phase*18,p.y+(i-3)*3,2+wet,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;}}
-      const config=GRIP_SCENES[state.scene];badge(ctx,`${config.variable} ${state.value}${config.unit}`,35,76,ORANGE);label(ctx,`基准 ${state.scene===0?'干路 / 30 km/h':state.scene===1?'湿路 / 30 km/h':'湿路 / 标准轮胎'}`,40,130,13,COLOR);label(ctx,`实验 ${state.scene===0?`${state.value}%湿路 / 30 km/h`:state.scene===1?`湿路 / ${state.value} km/h`:`湿路 / ${state.value}%轮胎条件`}`,40,153,13,ORANGE);
-      roundRect(ctx,110,432,785,52,15,'#111c32','#486886');glowLine(ctx,[{x:160,y:458},{x:840,y:458}],'#536e95',3);glowLine(ctx,[{x:160,y:458},{x:replayX(),y:458}],COLOR,3);ctx.fillStyle='#192b46';ctx.strokeStyle=COLOR;ctx.lineWidth=3;ctx.beginPath();ctx.arc(replayX(),458,dragReplay?16:12,0,Math.PI*2);ctx.fill();ctx.stroke();label(ctx,'回放',122,463,12,'#a4c8db');label(ctx,`${frame.time.toFixed(1)} s`,851,464,12,COLOR);
-      if(replaying){const zx=clamp(replayX()-95,480,735),zy=221;roundRect(ctx,zx,zy,230,172,13,'#14213af2','#a6b7ff');label(ctx,'同步位置放大 · 真实帧',zx+14,zy+24,12,COLOR);const mid={x:(frame.a.x+frame.b.x)/2,y:(frame.a.y+frame.b.y)/2};const scale=Math.min(16,130/Math.max(8,Math.hypot(frame.a.x-frame.b.x,frame.a.y-frame.b.y)));const pa={x:zx+115+(frame.a.x-mid.x)*scale,y:zy+95-(frame.a.y-mid.y)*scale},pb={x:zx+115+(frame.b.x-mid.x)*scale,y:zy+95-(frame.b.y-mid.y)*scale};ctx.save();ctx.beginPath();ctx.rect(zx+6,zy+35,218,120);ctx.clip();car(ctx,frame.a,COLOR,1.1,pa);car(ctx,frame.b,ORANGE,1.1,pb);for(const [p,theta,c] of [[pa,frame.a.angle,COLOR],[pb,frame.b.angle,ORANGE]] as const){glowLine(ctx,[p,{x:p.x+40*Math.cos(theta),y:p.y-40*Math.sin(theta)}],c,2);}ctx.restore();label(ctx,`差距 ${Math.hypot(frame.a.x-frame.b.x,frame.a.y-frame.b.y).toFixed(1)} m`,zx+15,zy+157,12,'#cbdce2');}
-      fx.draw(ctx);
+const starText = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
+
+const TIRE_INFO: Record<RaceTire, { label: string; tip: string }> = {
+  rain: { label: '🌧️ 排水雨天胎', tip: '深导水沟槽迅速排开路面积水，摩擦圆最大，弯中抓地力最稳！' },
+  standard: { label: '⚡ 日常全季胎', tip: '综合均衡；进急弯或积水前记得先点刹车减速再转向！' },
+  worn: { label: '🏎️ 磨损光头胎', tip: '花纹磨平无法排水，一遇湿路和积水摩擦圆骤缩，极易推头侧滑！' },
+};
+
+interface Spray {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  color: string;
+}
+
+export function mountGrip(host: HTMLElement, api: GameAPI): MountedGame {
+  const saved = api.getRecord('grip');
+  const bestStars: number[] = Array.isArray(saved.bestStars)
+    ? [0, 1, 2].map(i => Number((saved.bestStars as unknown[])[i]) || 0)
+    : [0, 0, 0];
+
+  let course = 0;
+  let tire: RaceTire = 'rain';
+  let seed = 1;
+  let state: GripRace = createGripRace(course, seed, tire);
+  let accumulator = 0;
+  let resultShown = false;
+  let lastStars = 0;
+  let lastCorners = 0;
+  let flashText = '';
+  let flashColor = '#47eaff';
+  let flashTimer = 0;
+  const sprays: Spray[] = [];
+  const hold = { left: false, right: false, brake: false, accel: false };
+
+  host.innerHTML = `<div class="as-shell" style="--as-accent:#47eaff">
+    <div class="as-topbar">
+      <div class="as-levels" role="group" aria-label="选择雨夜赛道">
+        ${RAIN_COURSES.map((c, i) => `<button type="button" class="as-level-btn" data-course="${i}" aria-pressed="${i === 0}"><span>0${i + 1} ${c.name}</span><b data-star="${i}">${starText(bestStars[i])}</b></button>`).join('')}
+      </div>
+      <div class="as-top-controls">
+        <div class="as-pill-group" role="group" aria-label="赛前更换轮胎（对比摩擦力）">
+          ${(['rain', 'standard', 'worn'] as RaceTire[]).map(t => `<button type="button" data-tire="${t}" aria-pressed="${t === 'rain'}">${TIRE_INFO[t].label}</button>`).join('')}
+        </div>
+        <button type="button" class="btn btn-small" data-pause disabled>Ⅱ 暂停</button>
+        <button type="button" class="btn btn-small" data-restart>重开</button>
+      </div>
+    </div>
+
+    <div class="as-main">
+      <div class="as-stage-col">
+        <div class="as-stage-wrap">
+          <div data-stage></div>
+          <div class="as-overlay" data-intro>
+            <span class="as-overlay-tag">RAIN GRIP · 轮胎摩擦圆挑战</span>
+            <h2>暴雨盘山夜，<br>守住你的摩擦圆！</h2>
+            <p>车辆巡航前进，按 <strong>A / D（← / →）</strong> 避开蓝色积水并吃下金星；看到弯道标牌时<strong>先按住刹车减速</strong>，再轻打方向优雅过弯！盯紧右侧<strong>实时轮胎摩擦圆</strong>，千万别让光点冲出圆外！</p>
+            <div class="as-overlay-actions">
+              <button type="button" class="btn btn-primary" data-start>🌧️ 雨夜发车 ↗</button>
+            </div>
+          </div>
+          <div class="as-overlay" data-paused hidden>
+            <span class="as-overlay-tag">PAUSED</span>
+            <h2>雨中稍歇</h2>
+            <p>车辆速度、抓地力与计时已暂停。</p>
+            <div class="as-overlay-actions">
+              <button type="button" class="btn btn-primary" data-resume>继续护航 →</button>
+              <button type="button" class="btn" data-restart>重新发车</button>
+            </div>
+          </div>
+          <div class="as-overlay" data-result hidden>
+            <span class="as-overlay-tag">FINISH · 雨夜战绩</span>
+            <h2 data-result-title>暴雨护航抵达！</h2>
+            <div class="as-overlay-stars" data-result-stars></div>
+            <div class="as-overlay-metrics" data-result-metrics></div>
+            <div class="as-overlay-science" data-result-science></div>
+            <div class="as-overlay-actions">
+              <button type="button" class="btn btn-primary" data-again>换路况再来一趟 ↗</button>
+              <button type="button" class="btn" data-next>下一条暴雨赛道 →</button>
+              <button type="button" class="btn" data-save>保存战绩</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="as-controls-bar" role="group" aria-label="雨夜驾驶控制">
+          <button type="button" class="as-action-btn" data-hold="left">← 向左避让<small>A / ←</small></button>
+          <button type="button" class="as-action-btn" data-hold="right">→ 向右避让<small>D / →</small></button>
+          <button type="button" class="as-action-btn is-amber" data-hold="brake">🛑 弯前减速<small>按住 · 空格 / ↓</small></button>
+          <button type="button" class="as-action-btn is-green" data-hold="accel">⚡ 直道加速<small>按住 · W / ↑</small></button>
+          <button type="button" class="as-action-btn" data-rescue>🛟 救援回道<small>滑出时可回位</small></button>
+        </div>
+
+        <div class="as-status-line">
+          <span data-status>绕开反光积水、弯前先减速再转向，保持连击拿三星！</span>
+          <div class="as-mini-actions">
+            <button type="button" class="btn" data-save>保存画面</button>
+          </div>
+        </div>
+      </div>
+
+      <aside class="as-sidebar" aria-label="实时轮胎摩擦圆仪表">
+        <div class="as-card">
+          <div class="as-card-head">
+            <h3>🎯 实时轮胎摩擦圆</h3>
+            <span class="as-badge" data-grip-badge>抓地充足</span>
+          </div>
+          <canvas class="as-friction-canvas" data-friction-canvas width="220" height="220" aria-label="实时轮胎摩擦圆示意图"></canvas>
+          <div class="as-stat-grid">
+            <div class="as-stat"><span>摩擦系数 μ</span><strong data-mu style="color:#47eaff">0.55</strong></div>
+            <div class="as-stat"><span>弯前建议车速</span><strong data-advice style="color:#75f1bb">25 km/h</strong></div>
+            <div class="as-stat"><span>完美过弯 / 连击</span><strong data-perfect style="color:#f5bc65">0 · ×0</strong></div>
+            <div class="as-stat"><span>收集护航星</span><strong data-stars-col>0 / 0</strong></div>
+          </div>
+        </div>
+
+        <div class="as-card">
+          <div class="as-card-head">
+            <h3>🔬 摩擦圆驾驶奥秘</h3>
+            <span class="as-badge" data-tire-badge>排水雨天胎</span>
+          </div>
+          <p class="as-science-tip" data-science-tip></p>
+          <p class="as-science-tip" style="--as-accent:#f5bc65">
+            <strong>为什么不能「边急刹边猛打方向」？</strong><br>
+            轮胎的总摩擦力是一个圆：刹车占掉纵向抓地力后，留给转向的横向抓地力就变小了！<strong>直道先减速 → 入弯轻转向</strong>最稳！
+          </p>
+        </div>
+      </aside>
+    </div>
+  </div>`;
+
+  const q = <T extends HTMLElement = HTMLElement>(s: string) => host.querySelector<T>(s)!;
+  const fCanvas = q<HTMLCanvasElement>('[data-friction-canvas]');
+  const fCtx = fCanvas.getContext('2d')!;
+
+  function popFlash(text: string, color: string) {
+    flashText = text;
+    flashColor = color;
+    flashTimer = 1.3;
+  }
+
+  function drawFrictionCircle() {
+    const w = 220, h = 220, cx = 110, cy = 110;
+    fCtx.clearRect(0, 0, w, h);
+    fCtx.fillStyle = '#071122';
+    fCtx.fillRect(0, 0, w, h);
+
+    // Axes
+    fCtx.strokeStyle = 'rgba(130, 175, 210, 0.25)';
+    fCtx.lineWidth = 1;
+    fCtx.beginPath();
+    fCtx.moveTo(cx, 18); fCtx.lineTo(cx, h - 18);
+    fCtx.moveTo(18, cy); fCtx.lineTo(w - 18, cy);
+    fCtx.stroke();
+
+    // Axis labels
+    fCtx.font = '600 10px "Microsoft YaHei", sans-serif';
+    fCtx.fillStyle = '#7fa0be';
+    fCtx.textAlign = 'center';
+    fCtx.fillText('加速 ▲', cx, 14);
+    fCtx.fillText('▼ 刹车', cx, h - 6);
+    fCtx.textAlign = 'left';
+    fCtx.fillText('左转', 6, cy - 4);
+    fCtx.textAlign = 'right';
+    fCtx.fillText('右转', w - 6, cy - 4);
+    fCtx.textAlign = 'left';
+
+    // Dry road reference circle (outer dashed)
+    const maxR = 80;
+    fCtx.strokeStyle = 'rgba(120, 165, 200, 0.28)';
+    fCtx.setLineDash([4, 4]);
+    fCtx.beginPath(); fCtx.arc(cx, cy, maxR, 0, Math.PI * 2); fCtx.stroke();
+    fCtx.setLineDash([]);
+
+    // Current live available grip circle (scales physically with mu!)
+    const mu = state.mu || rainFriction(state);
+    const liveR = Math.max(22, Math.min(maxR, (mu / 0.9) * maxR));
+    const slipping = state.slip > 0.22;
+    const circleCol = slipping ? '#ff7676' : state.gripUse > 0.8 ? '#f5bc65' : '#47eaff';
+
+    fCtx.fillStyle = slipping ? 'rgba(255, 118, 118, 0.14)' : 'rgba(71, 234, 255, 0.12)';
+    fCtx.strokeStyle = circleCol;
+    fCtx.lineWidth = 2.4;
+    fCtx.beginPath(); fCtx.arc(cx, cy, liveR, 0, Math.PI * 2); fCtx.fill(); fCtx.stroke();
+
+    // Compute live longitudinal & lateral force demand vector
+    const road = rainRoad(state.course, state.progress);
+    const latForce = state.speed * state.speed * road.curvature + state.steer * 1.9;
+    const lonForce = state.braking ? 3.8 : state.accelerating ? -2.2 : -0.4;
+    const totalLimit = Math.max(0.5, mu * 9.81);
+    const vx = Math.max(-88, Math.min(88, (latForce / totalLimit) * liveR));
+    const vy = Math.max(-88, Math.min(88, (lonForce / totalLimit) * liveR));
+
+    // Vector arrow from center to current tire load
+    fCtx.strokeStyle = slipping ? '#ff8282' : '#75f1bb';
+    fCtx.lineWidth = 2.5;
+    fCtx.beginPath(); fCtx.moveTo(cx, cy); fCtx.lineTo(cx + vx, cy + vy); fCtx.stroke();
+
+    fCtx.fillStyle = slipping ? '#ff6464' : '#75f1bb';
+    fCtx.shadowColor = slipping ? '#ff6464' : '#75f1bb';
+    fCtx.shadowBlur = 10;
+    fCtx.beginPath(); fCtx.arc(cx + vx, cy + vy, 6, 0, Math.PI * 2); fCtx.fill();
+    fCtx.shadowBlur = 0;
+  }
+
+  function reset(nextCourse = course, nextTire = tire, bumpSeed = false, startNow = false) {
+    course = nextCourse;
+    tire = nextTire;
+    if (bumpSeed) seed++;
+    state = createGripRace(course, seed, tire);
+    state.mu = rainFriction(state);
+    accumulator = 0;
+    resultShown = false;
+    lastStars = 0;
+    lastCorners = 0;
+    sprays.length = 0;
+    hold.left = hold.right = hold.brake = hold.accel = false;
+    if (startNow) state.phase = 'running';
+    q('[data-intro]').hidden = startNow;
+    q('[data-paused]').hidden = true;
+    q('[data-result]').hidden = true;
+    q<HTMLButtonElement>('[data-pause]').disabled = !startNow;
+    host.querySelectorAll<HTMLButtonElement>('[data-course]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.course) === course)));
+    host.querySelectorAll<HTMLButtonElement>('[data-tire]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tire === tire)));
+    updateUI();
+  }
+
+  function showResult() {
+    resultShown = true;
+    const stars = rainStars(state);
+    bestStars[course] = Math.max(bestStars[course], stars);
+    q(`[data-star="${course}"]`).textContent = starText(bestStars[course]);
+    const totalStarItems = state.items.filter(e => e.kind === 'star').length;
+    const won = state.phase === 'complete';
+
+    q('[data-result-title]').textContent = stars === 3 ? '🏆 雨夜贴弯车神！三星通关' : won ? '🌧️ 暴雨护航成功抵达！' : '⚠️ 冲出赛道，调低入弯速度再战';
+    q('[data-result-stars]').textContent = starText(stars);
+    q('[data-result-metrics]').innerHTML = `
+      <span>本趟得分<strong style="color:#f5bc65">${state.score}</strong></span>
+      <span>完美过弯<strong style="color:#75f1bb">${state.perfectCorners} / ${state.corners.length}</strong></span>
+      <span>护航星<strong>${state.starsCollected} / ${totalStarItems}</strong></span>
+      <span>累计打滑<strong>${state.slipTime.toFixed(1)} s</strong></span>
+    `;
+    q('[data-result-science]').innerHTML = `💡 <strong>摩擦圆实测结论（${TIRE_INFO[tire].label}）：</strong>在湿滑度 ${Math.round(RAIN_COURSES[course].wet * 100)}% 的「${RAIN_COURSES[course].name}」中，你的累计侧滑时间为 <strong>${state.slipTime.toFixed(1)} 秒</strong>。试试把轮胎换成「${tire === 'worn' ? '排水雨天胎' : '磨损光头胎'}」跑同一条赛道，感受摩擦圆大小的变化！`;
+    q('[data-result]').hidden = false;
+    q<HTMLButtonElement>('[data-pause]').disabled = true;
+    api.playCue?.(won ? 'reward' : 'hit');
+
+    if (won || state.progress > RAIN_COURSES[course].length * 0.4) {
+      api.award('grip', `course-${course}`, Math.max(25, stars * 14), `完成${RAIN_COURSES[course].name}`);
+      if (tire !== 'rain') api.award('grip', 'tire-compare', 20, '对比不同轮胎雨天抓地力');
+      api.complete('grip');
     }
+    api.record('grip', {
+      bestStars,
+      summary: `使用${TIRE_INFO[tire].label}跑完「${RAIN_COURSES[course].name}」，完美过弯 ${state.perfectCorners} 次、收集 ${state.starsCollected} 颗星，获 ${stars} 星。`,
+      report: [
+        { label: '挑战赛道 / 轮胎', value: `${RAIN_COURSES[course].name} · ${TIRE_INFO[tire].label}` },
+        { label: '星级 / 完美过弯', value: `${stars} 星 · ${state.perfectCorners}/${state.corners.length} 弯` },
+        { label: '打滑时长 / 得分', value: `${state.slipTime.toFixed(1)} s · ${state.score} 分` },
+      ],
+    });
+    api.saveImage('grip', stage.capture());
+  }
+
+  function updateUI() {
+    const mu = state.mu || rainFriction(state);
+    const adviceKmh = Math.round(rainAdvice(state) * 3.6);
+    const totalStars = state.items.filter(e => e.kind === 'star').length;
+    const inPuddle = state.items.some(e => e.kind === 'puddle' && Math.abs(e.at - state.progress) < 8 && Math.abs(e.offset - state.offset) < 1.55);
+
+    q('[data-mu]').textContent = mu.toFixed(2);
+    q('[data-advice]').textContent = `${adviceKmh} km/h`;
+    q('[data-perfect]').textContent = `${state.perfectCorners} · ×${state.combo}`;
+    q('[data-stars-col]').textContent = `${state.starsCollected} / ${totalStars}`;
+    q('[data-tire-badge]').textContent = RACE_TIRES[tire].name;
+    q('[data-grip-badge]').textContent = state.slip > 0.25 ? '⚠️ 打滑失控!' : inPuddle ? '💧 踩中积水!' : state.gripUse > 0.8 ? '接近极限' : '抓地充足';
+    q('[data-science-tip]').innerHTML = inPuddle
+      ? '<strong>💧 正在穿过深积水！</strong>水膜托起轮胎导致摩擦系数 μ 瞬间减半，右图摩擦圆肉眼可见地缩小！'
+      : state.slip > 0.25
+        ? '<strong>⚠️ 超出摩擦圆极限！</strong>松开方向盘或先减速，把受力点拉回圆内就能稳住车身！'
+        : `<strong>${TIRE_INFO[tire].label}：</strong>${TIRE_INFO[tire].tip}`;
+
+    q('[data-status]').textContent = `${state.notice.title} — ${state.notice.copy}`;
+    q('[data-pause]').textContent = state.paused ? '▶ 继续' : 'Ⅱ 暂停';
+    drawFrictionCircle();
+  }
+
+  function draw(ctx: CanvasRenderingContext2D, time: number) {
+    const width = 1000, height = 540;
+    const cfg = RAIN_COURSES[course];
+    const scale = 11.2;
+    const roadNow = rainRoad(course, state.progress);
+    const look = rainRoad(course, state.progress + 20);
+    const camX = roadNow.x + (look.x - roadNow.x) * 0.2;
+    const baseY = height * 0.76;
+    const map = (at: number, offset = 0) => {
+      const r = rainRoad(course, at);
+      return { x: width / 2 + (r.x + r.normalX * offset - camX) * scale, y: baseY + (state.progress - at + r.normalY * offset) * scale };
+    };
+
+    // Stormy cyberpunk background
+    const bg = ctx.createLinearGradient(0, 0, 0, height);
+    bg.addColorStop(0, '#091024');
+    bg.addColorStop(1, '#0d2230');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    const start = Math.max(-10, state.progress - 22);
+    const end = state.progress + 78;
+
+    // Roadside pine trees
+    for (let at = Math.floor(start / 11) * 11; at < end; at += 11) {
+      for (const side of [-1, 1]) {
+        const pt = map(at, side * (8.5 + ((Math.floor(at) + 100) % 3) * 1.8));
+        ctx.fillStyle = '#15303d';
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, 15 + (at % 6), 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // Wet neon asphalt road
+    const roadPath = (offset = 0) => {
+      ctx.beginPath();
+      for (let at = start; at <= end; at += 1) {
+        const p = map(at, offset);
+        if (at === start) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+    };
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    roadPath(); ctx.lineWidth = (ROAD_HALF_WIDTH * 2 + 1.2) * scale; ctx.strokeStyle = '#3d5e78'; ctx.stroke();
+    roadPath(); ctx.lineWidth = ROAD_HALF_WIDTH * 2 * scale; ctx.strokeStyle = '#192c40'; ctx.stroke();
+    roadPath(); ctx.lineWidth = (ROAD_HALF_WIDTH * 2 - 0.5) * scale; ctx.strokeStyle = '#20374c'; ctx.stroke();
+
+    // Center dashed line & glowing wet edges
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(145, 220, 245, 0.45)'; ctx.setLineDash([10, 14]); roadPath(); ctx.stroke(); ctx.setLineDash([]);
+    for (const off of [-ROAD_HALF_WIDTH, ROAD_HALF_WIDTH]) {
+      roadPath(off); ctx.strokeStyle = 'rgba(71, 234, 255, 0.55)'; ctx.lineWidth = 2.5; ctx.stroke();
+    }
+
+    // Shimmering puddles & golden Apex stars
+    for (const item of state.items) {
+      if (item.at < start || item.at > end || item.resolved) continue;
+      const p = map(item.at, item.offset);
+      if (item.kind === 'puddle') {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(Math.atan(rainRoad(course, item.at).dx));
+        const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 74);
+        g.addColorStop(0, 'rgba(71, 210, 255, 0.55)');
+        g.addColorStop(1, 'rgba(30, 80, 120, 0.08)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.ellipse(0, 0, 18, 72, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(170, 235, 255, 0.55)';
+        ctx.lineWidth = 1.4;
+        for (let r = 0; r < 3; r++) {
+          ctx.beginPath(); ctx.ellipse(0, -34 + r * 34, 11, 5, 0, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.translate(p.x, p.y + (api.reducedMotion() ? 0 : Math.sin(time * 4 + item.id) * 3));
+        ctx.fillStyle = '#ffe294';
+        ctx.strokeStyle = '#f5bc65';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#f5bc65';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const a = -Math.PI / 2 + (i * Math.PI) / 5;
+          const rad = i % 2 ? 6 : 13;
+          ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+        }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+    }
+
+    // Corner chevron signs
+    for (const c of state.corners) {
+      if (c.at < start || c.at > end || c.resolved) continue;
+      const p = map(c.at, 6.8);
+      roundRect(ctx, p.x - 20, p.y - 18, 40, 34, 6, '#142b42', '#f5bc65');
+      ctx.textAlign = 'center';
+      label(ctx, rainRoad(course, c.at).curvature > 0 ? '↗' : '↖', p.x, p.y + 6, 22, '#ffe099', 700);
+      ctx.textAlign = 'left';
+    }
+
+    // Finish line
+    if (state.progress + 78 > cfg.length) {
+      const fp = map(cfg.length);
+      ctx.strokeStyle = '#75f1bb';
+      ctx.lineWidth = 8;
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath(); ctx.moveTo(fp.x - 56, fp.y); ctx.lineTo(fp.x + 56, fp.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.textAlign = 'center';
+      label(ctx, '🏁 护航终点', fp.x, fp.y - 18, 18, '#b8ffe0', 700);
+      ctx.textAlign = 'left';
+    }
+
+    // Tire track trail (turns glowing amber-red when slipping!)
+    const tr = state.trail.filter(pt => pt.at >= start);
+    if (tr.length > 1) {
+      ctx.strokeStyle = state.slip > 0.25 ? 'rgba(255, 145, 100, 0.78)' : 'rgba(130, 220, 245, 0.45)';
+      ctx.lineWidth = state.slip > 0.25 ? 4.5 : 3;
+      ctx.beginPath();
+      tr.forEach((pt, i) => {
+        const p = map(pt.at, pt.offset);
+        if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+    }
+
+    // Hydroplane water spray plumes
+    for (const sp of sprays) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - sp.life / 0.45);
+      ctx.fillStyle = sp.color;
+      ctx.beginPath(); ctx.arc(sp.x, sp.y, 3.2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // Player EV
+    const player = map(state.progress, state.offset);
+    const v = api.getVehicle();
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(-Math.PI / 2 + Math.atan(roadNow.dx) + Math.atan2(state.lateralVelocity, Math.max(1, state.speed)) * 0.68);
+    drawPremiumTopCar(ctx, 0, 0, v.color, 0.84, v.body);
+    ctx.restore();
+
+    if (state.slip > 0.25) {
+      ctx.textAlign = 'center';
+      label(ctx, '⚠️ 抓地突破极限！先减速稳住！', player.x, player.y - 54, 16, '#ffad85', 700);
+      ctx.textAlign = 'left';
+    }
+
+    // Animated slanting rain streaks
+    const moving = state.phase === 'running' && !state.paused && !api.reducedMotion();
+    const rt = moving ? state.tick * GRIP_RACE_DT : 0;
+    ctx.strokeStyle = `rgba(170, 224, 255, ${0.14 + cfg.wet * 0.2})`;
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 85; i++) {
+      const rx = (i * 131 + rt * 50) % width;
+      const ry = (i * 67 + rt * 280) % height;
+      ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 5, ry + 15); ctx.stroke();
+    }
+
+    // Floating feedback flash
+    if (flashTimer > 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, flashTimer * 1.4);
+      ctx.textAlign = 'center';
+      label(ctx, flashText, 500, 175 - (1.3 - flashTimer) * 26, 24, flashColor, 800);
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
+
+    // Top HUD overlays
+    roundRect(ctx, 18, 16, 175, 62, 12, 'rgba(9, 18, 35, 0.88)', '#314f6e');
+    label(ctx, `${Math.round(state.speed * 3.6)}`, 34, 60, 34, state.slip > 0.25 ? '#ff9878' : '#eef8ff', 800);
+    label(ctx, 'km/h', 105, 58, 14, '#8db0ce', 600);
+    label(ctx, `建议 ≤ ${Math.round(rainAdvice(state) * 3.6)} km/h`, 34, 31, 11, '#75f1bb', 600);
+
+    roundRect(ctx, 370, 16, 260, 62, 12, 'rgba(9, 18, 35, 0.88)', '#314f6e');
+    ctx.textAlign = 'center';
+    label(ctx, `得分 ${String(state.score).padStart(4, '0')} · 连击 ×${Math.max(1, state.combo)}`, 500, 43, 17, '#f5bc65', 700);
+    label(ctx, `进度 ${Math.min(100, Math.round((state.progress / cfg.length) * 100))}% · 剩余 ${Math.max(0, Math.ceil(rainTimeLimit(state) - state.tick * GRIP_RACE_DT))}s`, 500, 66, 12, '#9ebad4');
+    ctx.textAlign = 'left';
+
+    // Route mini-map (top-right)
+    const mx = width - 104, my = 18, mw = 82, mh = 116;
+    roundRect(ctx, mx - 8, my, mw + 16, mh + 16, 10, 'rgba(10, 20, 38, 0.88)', '#385876');
+    ctx.beginPath();
+    for (let at = 0; at <= cfg.length; at += 5) {
+      const r = rainRoad(course, at);
+      const x = mx + 14 + (r.x / (cfg.amplitude * 2)) * 54;
+      const y = my + 8 + mh - (at / cfg.length) * mh;
+      if (at === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = '#5ebad4';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    const cur = rainRoad(course, state.progress);
+    ctx.fillStyle = '#f5bc65';
+    ctx.beginPath();
+    ctx.arc(mx + 14 + (cur.x / (cfg.amplitude * 2)) * 54, my + 8 + mh - (state.progress / cfg.length) * mh, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const stage = createStage(q('[data-stage]'), {
+    width: 1000,
+    height: 540,
+    label: '暴雨盘山抓地力赛道：左右避让积水、弯前减速并观察右侧摩擦圆变化。',
+    update(dt) {
+      if (flashTimer > 0) flashTimer = Math.max(0, flashTimer - dt);
+      for (let i = sprays.length - 1; i >= 0; i--) {
+        sprays[i].life += dt;
+        sprays[i].x += sprays[i].vx * dt;
+        sprays[i].y += sprays[i].vy * dt;
+        if (sprays[i].life >= 0.45) sprays.splice(i, 1);
+      }
+
+      if (state.phase === 'running' && !state.paused && !document.hidden) {
+        const steerDir = (hold.right ? 1 : 0) - (hold.left ? 1 : 0);
+        state.steer = steerDir;
+        state.braking = hold.brake;
+        state.accelerating = hold.accel;
+
+        accumulator += Math.min(0.08, dt);
+        while (accumulator >= GRIP_RACE_DT && state.phase === 'running') {
+          accumulator -= GRIP_RACE_DT;
+          stepGripRace(state);
+        }
+
+        if (state.starsCollected > lastStars) {
+          lastStars = state.starsCollected;
+          api.playCue?.('boost');
+          popFlash('★ +50 护航星！', '#ffe08a');
+        }
+        if (state.perfectCorners > lastCorners) {
+          lastCorners = state.perfectCorners;
+          api.playCue?.('reward');
+          popFlash(`✨ 完美贴弯 APEX ×${state.combo}！`, '#75f1bb');
+        }
+
+        if (!api.reducedMotion() && (state.slip > 0.2 || state.speed > 5)) {
+          const col = state.slip > 0.25 ? '#ff9d78' : 'rgba(130, 220, 255, 0.85)';
+          const px = 500 + state.offset * 11.2;
+          sprays.push({
+            x: px + (Math.random() - 0.5) * 26,
+            y: 425,
+            vx: (Math.random() - 0.5) * 70,
+            vy: 60 + Math.random() * 80,
+            life: 0,
+            color: col,
+          });
+        }
+
+        const phaseNow: string = state.phase;
+        if ((phaseNow === 'complete' || phaseNow === 'failed') && !resultShown) showResult();
+        updateUI();
+      }
+    },
+    draw,
   });
-  const slider=ui.q<HTMLInputElement>('[data-variable-slider]');slider.addEventListener('input',()=>{const value=Number(slider.value);sliding=true;reset(state.scene,value,true);journal.action();ui.status(`${GRIP_SCENES[state.scene].variable}随滑动更新，其余条件保持一致；新一轮已准备。`);});slider.addEventListener('change',()=>{sliding=false;fx.pulse(120,125,ORANGE);});slider.addEventListener('pointerup',()=>sliding=false);
-  ui.q<HTMLInputElement>('[data-replay-slider]').addEventListener('input',event=>replay(Number((event.target as HTMLInputElement).value)/1000));host.querySelectorAll<HTMLElement>('[data-scene]').forEach(b=>b.addEventListener('click',()=>reset(Number(b.dataset.scene))));ui.q('[data-reset]').addEventListener('click',()=>reset(state.scene,state.value,true));ui.q('[data-save]').addEventListener('click',()=>journal.save(ui.media.capture(stage.capture()),state.ended?undefined:{...result(),success:false,observed:`进行中：双车已运行 ${state.time.toFixed(1)} s，当前位置相距 ${gripDifference(state).toFixed(1)} m`,comparison:undefined}));reset();
-  return {destroy(){hold.destroy();sliding=dragReplay=false;ui.media.destroy();stage.destroy();}};
+
+  // Event bindings
+  host.querySelectorAll<HTMLButtonElement>('[data-course]').forEach(b =>
+    b.addEventListener('click', () => reset(Number(b.dataset.course), tire, false, false))
+  );
+  host.querySelectorAll<HTMLButtonElement>('[data-tire]').forEach(b =>
+    b.addEventListener('click', () => reset(course, b.dataset.tire as RaceTire, false, state.phase === 'running'))
+  );
+  q('[data-start]').addEventListener('click', () => { reset(course, tire, false, true); api.playCue?.('start'); });
+  q('[data-resume]').addEventListener('click', () => { state.paused = false; q('[data-paused]').hidden = true; updateUI(); });
+  q('[data-pause]').addEventListener('click', () => {
+    if (state.phase !== 'running') return;
+    state.paused = !state.paused;
+    q('[data-paused]').hidden = !state.paused;
+    updateUI();
+  });
+  host.querySelectorAll<HTMLButtonElement>('[data-restart]').forEach(b =>
+    b.addEventListener('click', () => { reset(course, tire, false, true); api.playCue?.('start'); })
+  );
+  q('[data-again]').addEventListener('click', () => { reset(course, tire, true, true); api.playCue?.('start'); });
+  q('[data-next]').addEventListener('click', () => { reset((course + 1) % RAIN_COURSES.length, tire, false, true); api.playCue?.('start'); });
+  q('[data-rescue]').addEventListener('click', () => { rescueGripRace(state); api.playCue?.('start'); updateUI(); });
+  host.querySelectorAll<HTMLButtonElement>('[data-save]').forEach(b =>
+    b.addEventListener('click', () => { api.saveImage('grip', stage.capture()); api.notify('已保存雨天抓地力挑战画面！'); })
+  );
+
+  host.querySelectorAll<HTMLButtonElement>('[data-hold]').forEach(b => {
+    const k = b.dataset.hold as keyof typeof hold;
+    const set = (v: boolean) => { hold[k] = v; b.classList.toggle('is-active', v); };
+    b.addEventListener('pointerdown', e => { e.preventDefault(); set(true); });
+    b.addEventListener('pointerup', () => set(false));
+    b.addEventListener('pointerleave', () => set(false));
+    b.addEventListener('pointercancel', () => set(false));
+  });
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.target instanceof HTMLInputElement) return;
+    if (state.phase !== 'running' || state.paused) return;
+    const k = e.key.toLowerCase();
+    if (k === 'a' || k === 'arrowleft') { e.preventDefault(); hold.left = true; q('[data-hold="left"]').classList.add('is-active'); }
+    if (k === 'd' || k === 'arrowright') { e.preventDefault(); hold.right = true; q('[data-hold="right"]').classList.add('is-active'); }
+    if (k === ' ' || k === 's' || k === 'arrowdown') { e.preventDefault(); hold.brake = true; q('[data-hold="brake"]').classList.add('is-active'); }
+    if (k === 'w' || k === 'arrowup') { e.preventDefault(); hold.accel = true; q('[data-hold="accel"]').classList.add('is-active'); }
+  };
+  const onKeyUp = (e: KeyboardEvent) => {
+    const k = e.key.toLowerCase();
+    if (k === 'a' || k === 'arrowleft') { hold.left = false; q('[data-hold="left"]').classList.remove('is-active'); }
+    if (k === 'd' || k === 'arrowright') { hold.right = false; q('[data-hold="right"]').classList.remove('is-active'); }
+    if (k === ' ' || k === 's' || k === 'arrowdown') { hold.brake = false; q('[data-hold="brake"]').classList.remove('is-active'); }
+    if (k === 'w' || k === 'arrowup') { hold.accel = false; q('[data-hold="accel"]').classList.remove('is-active'); }
+  };
+  const onBlur = () => { hold.left = hold.right = hold.brake = hold.accel = false; if (state.phase === 'running' && !state.paused) { state.paused = true; q('[data-paused]').hidden = false; updateUI(); } };
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', onBlur);
+  reset(0, 'rain', false, false);
+
+  return {
+    destroy() {
+      stage.destroy();
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    },
+  };
 }

@@ -35,6 +35,26 @@ test('clicking a small nested target prefers it over a surrounding landmark', ()
   assert.equal(clickTargetAt(scene.targets, image, -10, -10), undefined);
 });
 
+test('finding requires a point inside the actual target, with no nearby-click fallback', () => {
+  const target = PERCEPTION_SCENES[0].targets[0];
+  const image = { x: 16, y: 40, w: 968, h: 602 };
+  const rect = annotationRect(target,image);
+  assert.equal(clickTargetAt([target],image,rect.x-1,rect.y+rect.h/2),undefined);
+  assert.equal(clickTargetAt([target],image,rect.x+rect.w+1,rect.y+rect.h/2),undefined);
+  assert.equal(clickTargetAt([target],image,rect.x+rect.w/2,rect.y-1),undefined);
+});
+
+test('each goal has a real clickable location despite nested and overlapping boxes', () => {
+  const image = {x:0,y:0,w:1,h:1};
+  for (const scene of PERCEPTION_SCENES) for (const target of scene.targets) {
+    let reachable=false;
+    for(let row=1;row<10&&!reachable;row++)for(let col=1;col<10;col++) {
+      if(clickTargetAt(scene.targets,image,target.x+target.w*col/10,target.y+target.h*row/10)?.id===target.id){reachable=true;break;}
+    }
+    assert.ok(reachable,`${scene.id}: ${target.name} must be findable in the photo`);
+  }
+});
+
 test('only manually marked boxes appear, preserve their card numbers, and disappear on restore', () => {
   const targets = PERCEPTION_SCENES[0].targets;
   const drawn = [], labels = [];

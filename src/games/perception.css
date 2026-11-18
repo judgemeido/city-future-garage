@@ -90,7 +90,7 @@
 .perception-zoom-toolbar>div { display: flex; gap: 6px; }
 .perception-experience .perception-zoom-fit,.perception-experience .perception-zoom-native { color: #47eaff; background: #0b1224; border-color: #30455f; padding: 7px 10px; font-size: 11px; }
 .perception-experience .perception-zoom-toolbar .is-active { background: #111c32; color: #e8f3ff; border-color: #47eaff; }
-.perception-zoom-viewport { height: min(62vh,720px); overflow: auto; overscroll-behavior: contain; padding: 12px; background: #0b1224; }
+.perception-zoom-viewport { height: min(62vh,720px); overflow: auto; padding: 12px; background: #0b1224; }
 .perception-zoom-image { display: block; width: auto; max-width: 100%; max-height: calc(62vh - 24px); margin: 0 auto; object-fit: contain; }
 .perception-zoom-image.is-crop { width: min(580px,100%); height: auto; }
 .perception-zoom-image.is-native { width: auto; height: auto; max-width: none; max-height: none; margin: 0; }
@@ -184,3 +184,268 @@
 .perception-experience .perception-zoom-toolbar .is-active { background:#143848; color:#d9faff; border-color:#47eaff; }
 .perception-experience button:focus-visible,.perception-experience input:focus-visible,.perception-experience summary:focus-visible,.perception-playfield:focus-visible { outline:3px solid #47eaff; outline-offset:3px; }
 @media(max-width:600px) { .perception-experience .perception-mode,.perception-experience .perception-capture,.perception-experience .perception-photo-zoom,.perception-experience .perception-clear-weather,.perception-experience .perception-target-zoom,.perception-experience .perception-target { min-height:44px; } .perception-experience .perception-sensor { min-height:36px; } }
+
+/* A photo hunt keeps the picture large and its objectives in a separate checklist. */
+.perception-intro { font-size: 12px; color: #a9c8dc; }
+.perception-workspace { grid-template-columns: minmax(0,1fr) 260px; gap: 16px; }
+.perception-photo-viewport { --photo-zoom: 1; width: 100%; aspect-ratio: 1000/660; overflow: auto; border: 1px solid #30455f; border-radius: 12px; background: #080e21; scrollbar-color: #4e7d98 #0b1224; }
+.perception-experience[data-photo-zoom='1'] .perception-photo-viewport { overflow: hidden; }
+.perception-experience .perception-playfield { width: calc(100% * var(--photo-zoom)); max-width: none; min-width: 0; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+.perception-experience[data-photo-zoom]:not([data-photo-zoom='1'])[data-scan-mode='photo'] .perception-playfield canvas { cursor: grab; }
+.perception-experience[data-scan-mode='scan'] .perception-playfield canvas,
+.perception-experience[data-scan-mode='full'] .perception-playfield canvas,
+.perception-experience[data-photo-zoom='1'][data-scan-mode='photo'] .perception-playfield canvas { cursor: crosshair; }
+.perception-photo-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: #aec5d8; font-size: 11px; }
+.perception-photo-actions > div { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.perception-photo-actions .btn { min-width: 32px; min-height: 32px; padding: 5px 9px; font-size: 12px; }
+.perception-photo-scale { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; color: #8eeeff; }
+.perception-goals { min-width: 0; padding: 16px; border: 1px solid #365874; border-radius: 12px; background: #0e1c2f; }
+.perception-level-number { font-size: 10px; color: #6fe5ef; letter-spacing: 1px; }
+.perception-level-heading h2 { margin: 7px 0; font-size: 19px; color: #e8f3ff; }
+.perception-level-heading p, .perception-goal-hint { margin: 0; color: #afc4d7; font-size: 11px; line-height: 1.7; }
+.perception-target-heading { margin-top: 14px; font-size: 12px; }
+.perception-target-count { color: #8eeeff; font-size: 12px; }
+.perception-objects { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; padding: 0; max-height: none; overflow: visible; list-style: none; }
+.perception-objects > li { min-width: 0; }
+.perception-experience .perception-target { width: 100%; min-height: 48px; padding: 8px; justify-content: flex-start; gap: 9px; text-align: left; background: #112338; color: #cad9e8; border-color: #29455e; }
+.perception-goal-index { display: grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; border-radius: 6px; background: #203b53; color: #a6cfe1; font-size: 11px; }
+.perception-goal-name { min-width: 0; flex: 1; font-size: 12px; line-height: 1.4; }
+.perception-goal-name small { display: block; margin-top: 2px; font-size: 9px; color: #8faabd; }
+.perception-found-mark { margin: 0; font-size: 10px; white-space: nowrap; color: #90a8be; }
+.perception-experience .perception-target.is-found { background: #11332e; border-color: #367e68; }
+.perception-target.is-found .perception-found-mark { color: #8ff0c7; }
+.perception-experience .perception-target.is-selected { outline: 1px solid #6fe5ef; outline-offset: -1px; }
+.perception-level-result { margin-top: 12px; color: #8ff0c7; font-size: 12px; }
+.perception-next-level { width: 100%; margin-top: 10px; }
+.perception-scene span small { display: block; font-size: 9px; color: #8fabbd; }
+.perception-scene.is-complete span small::after { content: ' ✓'; color: #8ff0c7; }
+.perception-experiment-settings { border: 1px solid #30455f; border-radius: 12px; background: #0b1224; }
+.perception-experiment-settings > summary { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px; cursor: pointer; color: #cce0f0; font-size: 12px; }
+.perception-experiment-settings > summary span { color: #92aebf; font-size: 11px; }
+.perception-experiment-settings > .perception-mode-group { margin: 0 16px; width: fit-content; }
+.perception-experience .perception-settings { grid-template-columns: repeat(4,minmax(0,1fr)); border: 0; max-height: none; overflow: visible; padding: 16px; gap: 16px; }
+.perception-settings .perception-control-heading, .perception-settings .perception-sensors, .perception-settings .perception-control-hint { grid-column: 1/-1; }
+.perception-settings .perception-test, .perception-settings .control-group:has(#perception-speed), .perception-settings .perception-target-zoom { grid-row: auto; grid-column: auto; }
+.perception-settings .perception-control-divider { display: none; }
+.perception-zoom-image:not(.is-crop) { cursor: crosshair; }
+@media(min-width:981px) {
+  .perception-goals { position: sticky; top: 12px; display: flex; flex-direction: column; max-height: calc(100dvh - 24px); }
+  .perception-goals .perception-objects { min-height: 70px; overflow-y: auto; scrollbar-color: #4e7d98 #0b1224; }
+  .perception-goals > :not(.perception-objects) { flex-shrink: 0; }
+}
+@media(max-width:980px) {
+  .perception-workspace { grid-template-columns: minmax(0,1fr); }
+  .perception-objects { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); max-height: 350px; overflow-y: auto; scrollbar-color: #4e7d98 #0b1224; }
+  .perception-experience .perception-settings { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:600px) {
+  .perception-photo-actions { flex-wrap: wrap; }
+  .perception-goals { padding: 13px; }
+  .perception-photo-caption > span:last-child { display: block; }
+  .perception-experiment-settings > summary { flex-wrap: wrap; gap: 6px; }
+  .perception-experience .perception-settings { grid-template-columns: minmax(0,1fr); }
+  .perception-settings .perception-test, .perception-settings .perception-target-zoom { grid-column: 1/-1; }
+}
+@media(max-width:420px) { .perception-objects { grid-template-columns: minmax(0,1fr); } }
+
+/* Inline sensor & vision-mode bar directly above the main stage. */
+.perception-photo-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+.perception-zoom-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.perception-weather-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid #3c7394;
+  background: linear-gradient(120deg, rgba(14, 38, 60, 0.94), rgba(18, 30, 56, 0.94));
+  box-shadow: 0 0 16px rgba(71, 234, 255, 0.12);
+}
+.perception-weather-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #dff6ff;
+  cursor: pointer;
+}
+.perception-weather-item input[type='range'] {
+  width: 96px;
+  accent-color: #47eaff;
+  cursor: pointer;
+}
+.perception-weather-item output {
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #75f1bb;
+  font-size: 12px;
+  font-weight: 700;
+}
+.perception-weather-controls .perception-clear-weather {
+  min-height: 28px;
+  padding: 3px 9px;
+  font-size: 11px;
+  border-color: #4c7ea0;
+  background: #10273e;
+  color: #cfefff;
+}
+.perception-weather-controls .perception-clear-weather:hover:not(:disabled) {
+  border-color: #f5bc65;
+  color: #ffe8ad;
+}
+.perception-weather-controls .perception-clear-weather:disabled {
+  opacity: 0.45;
+}
+.perception-sensor-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid #304d6c;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0e1e34, #0a1426);
+  box-shadow: inset 0 1px 0 #47eaff18;
+}
+.perception-sensor-bar .perception-mode-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  background: #081020;
+  border: 1px solid #2b4460;
+  border-radius: 8px;
+}
+.perception-sensor-bar .perception-mode {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+.perception-sensor-bar .perception-mode.is-active {
+  background: #143b4d;
+  color: #cffaff;
+  border-color: #47eaff;
+  box-shadow: inset 0 -2px #47eaff, 0 0 12px #47eaff24;
+}
+.perception-sensor-bar .perception-sensors {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+.perception-sensor-bar .perception-sensor-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.perception-sensor-bar .perception-sensor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #35506d;
+  border-radius: 8px;
+  background: #0c192d;
+  color: #9cb4cc;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background .16s, border-color .16s, color .16s, box-shadow .16s;
+}
+.perception-sensor-bar .perception-sensor:hover {
+  border-color: #5b85a8;
+  color: #e8f3ff;
+}
+.perception-sensor-bar .perception-sensor input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  cursor: pointer;
+}
+.perception-sensor-bar .perception-sensor i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #475569;
+  flex-shrink: 0;
+  transition: background .16s, box-shadow .16s;
+}
+.perception-sensor-bar .perception-sensor[data-sensor-kind='camera']:has(input:checked) {
+  background: #103249;
+  border-color: #47eaff;
+  color: #e6fbff;
+  box-shadow: 0 0 12px #47eaff26;
+}
+.perception-sensor-bar .perception-sensor[data-sensor-kind='camera']:has(input:checked) i {
+  background: #47eaff;
+  box-shadow: 0 0 8px #47eaff;
+}
+.perception-sensor-bar .perception-sensor[data-sensor-kind='lidar']:has(input:checked) {
+  background: #0e372d;
+  border-color: #34d399;
+  color: #dcffef;
+  box-shadow: 0 0 12px #34d3992e;
+}
+.perception-sensor-bar .perception-sensor[data-sensor-kind='lidar']:has(input:checked) i {
+  background: #34d399;
+  box-shadow: 0 0 8px #34d399;
+}
+.perception-sensor-bar .perception-sensor[data-sensor-kind='lidar'] input { accent-color: #34d399; }
+.perception-sensor-bar .perception-sensor[data-sensor-kind='radar']:has(input:checked) {
+  background: #38280d;
+  border-color: #fbbf24;
+  color: #fef3c7;
+  box-shadow: 0 0 12px #fbbf242e;
+}
+.perception-sensor-bar .perception-sensor[data-sensor-kind='radar']:has(input:checked) i {
+  background: #fbbf24;
+  box-shadow: 0 0 8px #fbbf24;
+}
+.perception-sensor-bar .perception-sensor[data-sensor-kind='radar'] input { accent-color: #fbbf24; }
+.perception-sensor-bar .perception-fusion {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 8px;
+  color: #b5ffe0;
+  background: linear-gradient(135deg, #0d3a30, #12364a);
+  border-color: #47eaff99;
+  box-shadow: 0 0 14px #34d39922;
+}
+.perception-sensor-bar .perception-fusion:hover:not(:disabled) {
+  background: linear-gradient(135deg, #135243, #184b66);
+  border-color: #75f1bb;
+  color: #ffffff;
+}
+@media(max-width:600px) {
+  .perception-sensor-bar { padding: 8px; gap: 6px; }
+  .perception-sensor-bar .perception-mode-group { width: 100%; }
+  .perception-sensor-bar .perception-mode { flex: 1 1 calc(50% - 4px); min-height: 38px; padding: 6px 6px; }
+  .perception-sensor-bar .perception-sensors { width: 100%; }
+  .perception-sensor-bar .perception-sensor-row { width: 100%; }
+  .perception-sensor-bar .perception-sensor { flex: 1 1 auto; justify-content: center; min-height: 38px; padding: 6px 8px; }
+  .perception-sensor-bar .perception-fusion { width: 100%; min-height: 38px; }
+}

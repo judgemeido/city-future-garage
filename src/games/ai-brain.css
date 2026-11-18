@@ -1,0 +1,497 @@
+.aib-root {
+  --aib-purple: #bc98ff;
+  --aib-cyan: #47eaff;
+  --aib-green: #75f1bb;
+  --aib-gold: #f5bc65;
+  --aib-pink: #ff7c95;
+  color: #e8f3ff;
+  display: grid;
+  gap: 14px;
+}
+.aib-root [hidden] { display: none !important; }
+
+.aib-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid #354e6b;
+  border-radius: 12px;
+  background: linear-gradient(120deg, #122138, #1c1b36);
+}
+.aib-header-copy { min-width: 0; flex: 1; }
+.aib-eyebrow {
+  display: none;
+}
+.aib-header h2 {
+  margin: 0 0 2px;
+  font-size: clamp(16px, 1.6vw, 19px);
+  letter-spacing: -0.3px;
+}
+.aib-header p {
+  margin: 0;
+  font-size: 11px;
+  color: #a9c2da;
+  line-height: 1.5;
+}
+.aib-header-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.aib-level-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 12px;
+  border: 1px solid #594b82;
+  border-radius: 9px;
+  background: #1d1a38;
+  min-width: 124px;
+}
+.aib-level-pill span { font-size: 9px; color: #b7a8df; }
+.aib-level-pill strong { font-size: 13px; color: #e5d7ff; }
+.aib-header-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.aib-header-btns .btn {
+  min-height: 36px;
+  padding: 7px 13px;
+  font-size: 12px;
+}
+.aib-btn-train {
+  background: #75f1bb !important;
+  border-color: #75f1bb !important;
+  color: #081c17 !important;
+  font-weight: 750;
+}
+.aib-btn-train:hover:not(:disabled) {
+  background: #a7f9d4 !important;
+}
+.aib-btn-exam {
+  background: #382c17 !important;
+  border-color: #f5bc65 !important;
+  color: #fef08a !important;
+  font-weight: 700;
+}
+.aib-btn-exam:hover:not(:disabled) {
+  background: #4e3b1b !important;
+}
+
+.aib-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 16px;
+  align-items: start;
+}
+.aib-main {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.aib-stage-card {
+  border: 1px solid #3b5878;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0a1426;
+  box-shadow: 0 14px 36px #0004;
+}
+.aib-stage {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+.aib-stage-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding: 20px;
+  background: radial-gradient(circle at center, rgba(16, 26, 48, 0.90), rgba(8, 14, 29, 0.95));
+  backdrop-filter: blur(4px);
+}
+.aib-stage-overlay span {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #75f1bb;
+  font-weight: 700;
+}
+.aib-stage-overlay h3 {
+  margin: 0;
+  font-size: clamp(20px, 2.6vw, 28px);
+  color: #f0f8ff;
+}
+.aib-stage-overlay p {
+  margin: 0;
+  max-width: 520px;
+  font-size: 12px;
+  line-height: 1.75;
+  color: #b7cde2;
+}
+.aib-overlay-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.aib-action-dock {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  background: #0f1c32;
+  border-top: 1px solid #2c435e;
+}
+.aib-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 68px;
+  padding: 8px 6px;
+  border: 1.5px solid #35506d;
+  border-radius: 10px;
+  background: #13243c;
+  color: #e8f3ff;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.14s, border-color 0.14s, background 0.14s, box-shadow 0.14s;
+}
+.aib-action-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--act-color);
+  background: #1a2f4d;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--act-color) 22%, transparent);
+}
+.aib-action-btn:active:not(:disabled),
+.aib-action-btn.is-flash {
+  transform: translateY(1px);
+  border-color: var(--act-color);
+  background: color-mix(in srgb, var(--act-color) 24%, #111c32);
+}
+.aib-action-btn strong {
+  font-size: 15px;
+  color: var(--act-color);
+}
+.aib-action-btn span {
+  font-size: 10px;
+  color: #a8c1d8;
+}
+.aib-action-btn kbd {
+  font: 600 9px monospace;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #0a1426;
+  border: 1px solid #2e4560;
+  color: #93b0cb;
+}
+.aib-root[data-bullet='true'] .aib-action-dock {
+  background: #191636;
+  border-top-color: #bc98ff;
+}
+.aib-root[data-bullet='true'] .aib-action-btn:not(:disabled) {
+  border-color: color-mix(in srgb, var(--act-color) 70%, #ffffff);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--act-color) 22%, transparent);
+}
+
+.aib-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: #0c172a;
+  border-top: 1px solid #233850;
+  font-size: 11px;
+  color: #9bb6cf;
+}
+.aib-toolbar-row > div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.aib-toolbar-row .btn {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
+.aib-coach-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 16px;
+  border-radius: 11px;
+  border: 1px solid #35506d;
+  border-left: 4px solid #bc98ff;
+  background: #122036;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #dcebf9;
+  min-height: 62px;
+}
+.aib-coach-banner[data-tone='good'] {
+  border-left-color: #75f1bb;
+  background: #102a29;
+}
+.aib-coach-banner[data-tone='warn'] {
+  border-left-color: #ff7c95;
+  background: #2e1928;
+}
+.aib-coach-icon {
+  font-size: 20px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+/* Right Column: Live Neural Brain Panel */
+.aib-brain-panel {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid #3b4b73;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #16223b, #10192d);
+}
+.aib-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.aib-panel-head h3 {
+  margin: 0;
+  font-size: 15px;
+  color: #eef6ff;
+}
+.aib-panel-head span {
+  font-size: 10px;
+  color: #bc98ff;
+  font-weight: 600;
+}
+
+.aib-style-bar {
+  display: grid;
+  gap: 6px;
+}
+.aib-style-bar > span {
+  font-size: 11px;
+  color: #a6bfd7;
+}
+.aib-style-btns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+.aib-style-btns button {
+  min-height: 34px;
+  padding: 5px 4px;
+  border: 1px solid #344b66;
+  border-radius: 7px;
+  background: #0d182b;
+  color: #a6bfd7;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.aib-style-btns button[aria-pressed='true'] {
+  background: #2a2448;
+  border-color: #bc98ff;
+  color: #efe5ff;
+  font-weight: 700;
+}
+
+/* Live Neural Network SVG Visualization */
+.aib-net-box {
+  padding: 10px;
+  border: 1px solid #2d425e;
+  border-radius: 10px;
+  background: #091222;
+}
+.aib-net-box svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.aib-probs {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.aib-prob-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 34px;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #c2d6ea;
+}
+.aib-prob-track {
+  height: 7px;
+  border-radius: 4px;
+  background: #192940;
+  overflow: hidden;
+}
+.aib-prob-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+.aib-prob-row b {
+  text-align: right;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: #e8f3ff;
+}
+
+/* Scenario Memory Bank */
+.aib-memory-list {
+  display: grid;
+  gap: 6px;
+}
+.aib-mem-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #2b4059;
+  border-radius: 8px;
+  background: #0c172a;
+  font-size: 11px;
+}
+.aib-mem-item.is-mastered {
+  border-color: #367866;
+  background: #0f2726;
+}
+.aib-mem-item.is-polluted {
+  border-color: #a84863;
+  background: #2b1622;
+}
+.aib-mem-info {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.aib-mem-info strong {
+  font-size: 12px;
+  color: #e8f3ff;
+}
+.aib-mem-info span {
+  font-size: 10px;
+  color: #9cb6cf;
+}
+.aib-mem-item.is-polluted .aib-mem-info span {
+  color: #ff9eb1;
+}
+.aib-mem-item.is-mastered .aib-mem-info span {
+  color: #88f4c6;
+}
+.aib-mem-clean {
+  flex-shrink: 0;
+  border: 1px solid #445f7a;
+  background: #14243b;
+  color: #c7dcef;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.aib-mem-clean:hover {
+  border-color: #ff7c95;
+  color: #ffcad5;
+}
+
+.aib-decision-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin: 9px 9px 0;
+  padding: 8px 10px;
+  border: 1px solid #bc98ff;
+  border-radius: 8px;
+  background: #211a38;
+  color: #e9d5ff;
+  font-size: 13px;
+}
+.aib-decision-status[hidden] { display: none; }
+.aib-decision-status strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* 4 Science Concept Cards */
+.aib-concepts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.aib-concept-card {
+  padding: 13px 14px;
+  border: 1px solid #2c415c;
+  border-radius: 11px;
+  background: #0e1a2e;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+.aib-concept-card.is-unlocked {
+  border-color: #46967d;
+  background: linear-gradient(145deg, #102a2a, #0e1c30);
+}
+.aib-concept-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.aib-concept-card strong {
+  font-size: 12px;
+  color: #e8f3ff;
+}
+.aib-concept-badge {
+  font-size: 9px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #1a2c44;
+  color: #96b1cb;
+  white-space: nowrap;
+}
+.aib-concept-card.is-unlocked .aib-concept-badge {
+  background: #164438;
+  color: #75f1bb;
+}
+.aib-concept-card p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #a6bfd7;
+}
+
+@media (max-width: 1100px) {
+  .aib-grid { grid-template-columns: 1fr; }
+  .aib-concepts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .aib-header { padding: 12px; }
+  .aib-action-dock { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 9px; }
+  .aib-action-btn { min-height: 58px; }
+  .aib-concepts { grid-template-columns: 1fr; }
+  .aib-stage-overlay { padding: 12px; gap: 6px; }
+  .aib-stage-overlay h3 { font-size: 18px; }
+  .aib-stage-overlay p { font-size: 11px; }
+}

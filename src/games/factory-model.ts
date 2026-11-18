@@ -38,9 +38,9 @@ export const WHEELS = [
   { value: 'trail', title: '大径旅行轮', size: '225/60 R18', radius: .34, rolling: .019, grip: .83, mass: 76, coins: 26 },
 ];
 export const BODIES = [
-  { value: 'city', title: '豆豆 · 城市轻巧车', mass: 780, drag: .58, coins: 16 },
-  { value: 'touring', title: '山野 · 旅行跨界车', mass: 940, drag: .69, coins: 22 },
-  { value: 'sport', title: '闪电 · 电动赛车', mass: 850, drag: .52, coins: 24 },
+  { value: 'city', title: '星驰 · 智驾轿跑', mass: 780, drag: .58, coins: 16 },
+  { value: 'touring', title: '星舰 · 智驾 SUV', mass: 940, drag: .69, coins: 22 },
+  { value: 'sport', title: '极光 · 电动超跑', mass: 850, drag: .52, coins: 24 },
 ];
 export const ROADS: Road[] = [
   { id: 'city', title: '校园快递员', subtitle: '100 kg 快递任务 · 安全送达才算酷', distance: 1200, speed: 42, grade: 0, payload: 100, seconds: 14 },

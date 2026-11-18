@@ -1,57 +1,711 @@
-import { GAME_COLORS } from '../theme';
-import { createStage, drawCar, label, roundRect } from '../platform';
+import { drawPremiumCar } from '../car-art';
+import { createStage, label, roundRect } from '../platform';
 import type { GameAPI, MountedGame } from '../types';
-import { LabFX, LabJournal, badge, clamp, labBackground, labShell, type LabResult } from './lab';
-import { CHARGING_NAMES, allocate, connect, createCharging, stepCharging } from './charging-model';
+import { QUIZ_BANK } from './charging-quiz-bank';
+import {
+  QUIZ_QUESTION_COUNT,
+  QUIZ_SCORING,
+  QUIZ_TIME_LIMIT,
+  createQuizSession,
+  gradeQuizWithAI,
+  startQuizSession,
+  submitQuizAnswer,
+  tickQuizTimer,
+  type QuizMode,
+  type QuizSessionState,
+} from './charging-quiz-model';
+import './charging-quiz.css';
 
-const COLOR=GAME_COLORS.charging;
-export function mountCharging(host:HTMLElement,api:GameAPI):MountedGame {
-  const ui=labShell(host,{id:'charging',color:COLOR,tag:'07 / CHARGING · 能量分配',scenes:CHARGING_NAMES,goals:['观察：功率是补电快慢，电量是存了多少。','观察：两根线共享同一个供电上限。','观察：急需补电的车可以优先分配。'],toolbar:'<button class="btn btn-primary active" data-strategy="balanced">均衡补电</button><button class="btn" data-strategy="priority">优先选中车</button><button class="btn" data-pause>暂停补电</button><div class="lab-metrics"><span>已过 <strong data-time>0.0 min</strong></span><span>总供电 <strong data-power>0 kW</strong></span><span>存入 <strong data-energy>0.00 kWh</strong></span></div>',tools:'<p>拖充电头到发光接口，松手吸附接入。也可先点充电头，再点车辆。点车辆查看需求，点已连接接口可拔线。</p><div class="lab-tool-buttons"><button class="btn btn-small" data-unplug>拔掉选中车的线</button><button class="btn btn-small" data-speed="1">1倍时间</button><button class="btn btn-small" data-speed="3">3倍时间</button></div><p>接好第一根线后开始补电；拖线时暂停计时，方便接线。三星：全部按时到目标，调度不超过车辆数+2次；两星：全部按时；一星：至少一辆按时完成。</p>',cards:[{title:'功率与电量',text:'功率像水流快慢，电量像水箱里已有多少水。教学模型按功率乘时间计算补入的电量，车辆不用充满，只需达到任务目标。',source:'S3 · EPA 充电说明',url:'https://www.epa.gov/greenvehicles/plug-electric-vehicle-charging-details'},{title:'车与桩共同影响',text:'设备有供电上限，车辆也有接收上限。电池已有电量、容量、类型和温度会影响充电时间；这里用固定接收能力作示意。',source:'S4 · EPA 充电基础',url:'https://www.epa.gov/greenvehicles/plug-electric-vehicle-charging-basics'},{title:'共享有限供电',text:'本站的总供电固定。优先给一辆车分配更多功率，其他已连接车辆的份额会减少。观察电缆光流和电池填充的变化。',source:'S3 · EPA 充电说明',url:'https://www.epa.gov/greenvehicles/plug-electric-vehicle-charging-details'}]});
-  const journal=new LabJournal('charging',api,host,ui.media.evidence),fx=new LabFX(api.reducedMotion);
-  let state=createCharging(0),selected='a',running=true,speed=1,drag:number|null=null,armed:number|null=null,head={x:0,y:0},finished=false,started=false,dragMoved=false;
-  let comparison: string | undefined;
-  let spring:{plug:number;from:{x:number;y:number};age:number}|null=null,pulses:{plug:number;age:number}[]=[],displayPower=[0,0],accumulator=0;
-  const anchor=(plug:number)=>({x:plug===0?170:465,y:420});
-  const resting=(plug:number)=>({x:plug===0?285:580,y:412});
-  const carX=(index:number)=>state.cars.length===2?[370,760][index]:[265,550,830][index];
-  const port=(id:string)=>({x:carX(state.cars.findIndex(c=>c.id===id))-78,y:256});
-  const atPort=(x:number,y:number)=>state.cars.find(c=>Math.hypot(x-port(c.id).x,y-256)<55);
-  const onCar=(x:number,y:number)=>state.cars.find((c,i)=>Math.abs(x-carX(i))<115&&y>140&&y<330);
-  function updateUI(){const power=running&&started&&drag===null&&!finished?state.cars.reduce((sum,c)=>sum+c.power,0):0;ui.media.signal({position:drag!==null?head.x/1000:Math.min(1,state.delivered/Math.max(1,state.cars.reduce((sum,c)=>sum+c.target-c.initial,0))),activity:power/state.capacity,text:`教学供电：${Math.round(power)} kW · 已存入 ${state.delivered.toFixed(2)} kWh`});ui.q('[data-time]').textContent=`${state.time.toFixed(1)} min`;ui.q('[data-energy]').textContent=`${state.delivered.toFixed(2)} kWh`;ui.q('[data-power]').textContent=`${running&&started&&drag===null?Math.round(state.cars.reduce((sum,c)=>sum+c.power,0)):0} / ${state.capacity} kW`;ui.q('[data-pause]').textContent=running?'暂停补电':'继续补电';host.dataset.time=state.time.toFixed(3);host.dataset.delivered=state.delivered.toFixed(4);host.dataset.running=String(running&&started&&drag===null);host.dataset.dragHead=drag===null?'':`${head.x.toFixed(1)},${head.y.toFixed(1)}`;host.dataset.connections=String(state.cars.filter(c=>c.connected!==null).length);host.dataset.finished=String(finished);host.dataset.cars=JSON.stringify(state.cars.map(c=>({id:c.id,energy:c.energy,target:c.target,connected:c.connected,power:c.power,reachedAt:c.reachedAt})));host.querySelectorAll<HTMLElement>('[data-strategy]').forEach(b=>b.classList.toggle('active',b.dataset.strategy===state.strategy));}
-  function attach(plug:number,id:string|null){if(connect(state,plug,id)){started=true;armed=null;spring=null;journal.action();if(id){running=true;pulses.push({plug,age:0});const p=port(id);fx.pulse(p.x,p.y,COLOR);ui.status(`${state.cars.find(c=>c.id===id)!.name}已吸附接入，光流按实际供电变化。`);}else{fx.pulse(resting(plug).x,resting(plug).y,COLOR);ui.status('电缆已拔下，这辆车停止补电。');}updateUI();return true;}return false;}
-  function result():LabResult {const reached=state.cars.filter(c=>c.reachedAt!==null&&c.reachedAt<=c.deadline);const success=reached.length===state.cars.length;
-    return {scene:state.scene,name:CHARGING_NAMES[state.scene],success,stars:success?(state.adjustments<=state.cars.length+2?3:2):reached.length?1:0,changed:`我使用${state.strategy==='balanced'?'均衡':'优先'}补电，站点上限 ${state.capacity} kW`,observed:`${reached.length} / ${state.cars.length} 辆按时达到目标，实际存入 ${state.delivered.toFixed(2)} kWh`,learned:'功率描述补电快慢，电量描述已存入的能量；车和桩共同限制速度。',facts:state.cars.map(c=>({label:c.name,value:`${c.energy.toFixed(2)} / ${c.target.toFixed(1)} kWh · ${c.reachedAt!==null?`${c.reachedAt.toFixed(1)} min 达标`:`${c.deadline} min 前出发`}`})),conditions:{strategy:state.strategy,capacity:state.capacity},outcome:{delivered:state.delivered,time:state.time,reached:reached.length},comparison};}
-  function finish(){finished=true;running=false;journal.finish(result());const reached=state.cars.filter(c=>c.reachedAt!==null).length;if(reached>0)api.complete('charging');if(reached>0)api.award('charging',`scene-${state.scene}`,20,`${CHARGING_NAMES[state.scene]}补电体验`);ui.status(state.expired?'有车辆到出发时刻仍未达标，可以重开调整策略或接线顺序。':'所有车辆按时补够电啦！电池层格与实际存入电量一致。');state.cars.forEach(c=>fx.pulse(carX(state.cars.indexOf(c)),260,c.reachedAt!==null?COLOR:'#eda276'));updateUI();}
-  function reset(scene=state.scene){state=createCharging(scene);selected=state.priority;running=true;drag=armed=null;spring=null;pulses=[];started=finished=false;comparison=undefined;accumulator=0;displayPower=[0,0];ui.q('[data-result]').hidden=true;ui.scene(scene);ui.status(scene===2?'先接急需补电车，或选择它并点优先补电。拖动充电头到接口，松手接入。':'拖充电头到车上发光接口；也可先点充电头，再点车辆。');updateUI();}
-  const stage=createStage(ui.q('.lab-stage'),{width:1000,height:500,label:'充电站柔性电缆、共享供电光流和电池剖面教学示意',
-    pointer(kind,x,y){if(kind==='down'){if(finished)return;let clickedPlug:number|null=null;for(let plug=0;plug<2;plug++){const c=state.cars.find(c=>c.connected===plug);const p=c?port(c.id):resting(plug);if(Math.hypot(x-p.x,y-p.y)<38)clickedPlug=plug;}
-      if(clickedPlug!==null){drag=clickedPlug;dragMoved=false;head={x,y};armed=armed===clickedPlug?null:clickedPlug;spring=null;fx.pulse(x,y,COLOR);journal.action();}
-      else {const c=onCar(x,y);if(c){selected=c.id;fx.pulse(x,y,COLOR);state.priority=selected;if(armed!==null)attach(armed,c.id);else{allocate(state);ui.status(`${c.name}：已有 ${c.energy.toFixed(1)} kWh，目标 ${c.target} kWh，${c.deadline} min 前出发；最多接收 ${c.accept} kW。`);}updateUI();}}}
-      if(kind==='move'&&drag!==null){if(Math.hypot(head.x-x,head.y-y)>6)dragMoved=true;head={x:clamp(x,20,980),y:clamp(y,60,470)};const c=atPort(x,y);if(c&&c.reachedAt===null&&(c.connected===null||c.connected===drag))head=port(c.id);updateUI();}
-      if(kind==='up'&&drag!==null){const plug=drag;drag=null;const c=atPort(x,y);if(c&&c.connected===plug&&!dragMoved){attach(plug,null);armed=null;}else if(c&&attach(plug,c.id)){armed=null;}else{const nearRest=Math.hypot(x-resting(plug).x,y-resting(plug).y)<40;const connected=state.cars.find(c=>c.connected===plug);if(connected&&Math.hypot(x-port(connected.id).x,y-256)<35){attach(plug,null);}else{spring={plug,from:{...head},age:0};if(!nearRest)armed=null;ui.status(nearRest?'充电头已选中，再点车辆即可接线。':'这里没有可用接口，电缆回弹；请对准发光接口。');fx.pulse(head.x,head.y,'#efac7d');}updateUI();}}
+const LETTERS = ['A', 'B', 'C', 'D'] as const;
+const starText = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
+
+export function mountCharging(host: HTMLElement, api: GameAPI): MountedGame {
+  const saved = api.getRecord('charging');
+  const bestByMode: Record<QuizMode, { score: number; normalized: number; stars: number }> = {
+    normal: {
+      score: Number((saved.bestNormal as { score?: number } | undefined)?.score) || 0,
+      normalized: Number((saved.bestNormal as { normalized?: number } | undefined)?.normalized) || 0,
+      stars: Number((saved.bestNormal as { stars?: number } | undefined)?.stars) || 0,
     },
-    update(dt){fx.step(dt);if(spring){spring.age+=dt;if(spring.age>=.18)spring=null;}pulses.forEach(p=>p.age+=dt);pulses=pulses.filter(p=>p.age<.75);if(running&&started&&drag===null&&!finished&&!document.hidden){accumulator+=dt*speed;while(accumulator>=1/60&&!finished){accumulator-=1/60;const before=state.cars.map(c=>c.reachedAt);stepCharging(state,1/60);state.cars.forEach((c,i)=>{if(before[i]===null&&c.reachedAt!==null){fx.pulse(carX(i),290,COLOR);ui.status(`${c.name}已到目标，自动释放这根充电线，接下一辆车吧。`);}});if(state.ended)finish();}}else accumulator=0;
-      for(let plug=0;plug<2;plug++){const c=state.cars.find(c=>c.connected===plug);const target=running&&started&&drag===null?c?.power||0:0;displayPower[plug]+=(target-displayPower[plug])*Math.min(1,dt*10);}updateUI();},
-    draw(ctx,time){labBackground(ctx,COLOR,'把有限的电力，送进每一辆小车');roundRect(ctx,30,73,940,265,22,'#182b44','#385976');label(ctx,`站点容量 ${state.capacity} kW · 不要求充满`,55,100,13,'#a6bad0');
-      state.cars.forEach((c,i)=>{const x=carX(i),p=port(c.id);if(c.id===selected)roundRect(ctx,x-117,125,234,194,14,'#75f1bb13',COLOR);label(ctx,c.name,x-63,147,15,c.id==='c'&&state.scene===2?'#efb976':'#d7e8f3',600);drawCar(ctx,x,218,i===0?api.getVehicle().color:i===1?'#87b8ca':'#e7ad73',.64,0,api.getVehicle().body);
-        roundRect(ctx,x-65,275,130,24,6,'#111c32','#486886');for(let j=0;j<10;j++){roundRect(ctx,x-61+j*12.5,279,10,16,2,j<c.energy/c.capacity*10?COLOR:'#243753');}const goalX=x-61+c.target/c.capacity*125;ctx.strokeStyle='#f4cc8d';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(goalX,273);ctx.lineTo(goalX,302);ctx.stroke();label(ctx,`${c.energy.toFixed(2)} / ${c.target.toFixed(1)} kWh`,x-62,319,12,'#b3c9de');label(ctx,c.reachedAt!==null?'已达目标 ✓':`出发 ${c.deadline} min`,x-61,347,12,c.reachedAt!==null?COLOR:'#d2b793');
-        ctx.fillStyle=c.connected!==null?COLOR:'#111c32';ctx.strokeStyle=COLOR;ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,12,0,Math.PI*2);ctx.fill();ctx.stroke();if(drag!==null&&c.connected===null&&c.reachedAt===null){const near=Math.hypot(head.x-p.x,head.y-p.y)<60;ctx.strokeStyle=near?'#edffd7':COLOR;ctx.lineWidth=near?3:1;ctx.beginPath();ctx.arc(p.x,p.y,near?19:30,0,Math.PI*2);ctx.stroke();label(ctx,near?'松手接入':'接口',p.x-19,p.y-30,12,COLOR);}
-        if(c.connected!==null){const actual=running&&drag===null?c.power:0;badge(ctx,`${actual.toFixed(0)} kW · 上限${c.accept}`,x-63,173,COLOR);}
-      });
-      for(let plug=0;plug<2;plug++){const a=anchor(plug),c=state.cars.find(c=>c.connected===plug);let end=c?port(c.id):resting(plug);if(drag===plug)end=head;else if(spring?.plug===plug){const t=clamp(spring.age/.18,0,1);end={x:spring.from.x+(end.x-spring.from.x)*t,y:spring.from.y+(end.y-spring.from.y)*t};}
-        roundRect(ctx,a.x-44,a.y-40,88,73,12,'#14213a','#486886');label(ctx,`充电桩 ${plug+1}`,a.x-30,a.y+9,12,'#b3c9de');ctx.strokeStyle='#0b1425';ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(a.x,a.y-38);ctx.bezierCurveTo(a.x+90,a.y-115,end.x-100,end.y+120,end.x,end.y);ctx.stroke();ctx.strokeStyle=COLOR;ctx.lineWidth=2+displayPower[plug]/12;ctx.globalAlpha=c||drag===plug?.95:.45;ctx.stroke();ctx.globalAlpha=1;
-        const point=(t:number)=>{const k=1-t;return{x:k*k*k*a.x+3*k*k*t*(a.x+90)+3*k*t*t*(end.x-100)+t*t*t*end.x,y:k*k*k*(a.y-38)+3*k*k*t*(a.y-115)+3*k*t*t*(end.y+120)+t*t*t*end.y};};
-        if(displayPower[plug]>.1&&!api.reducedMotion())for(let k=0;k<6;k++){const t=(time*displayPower[plug]/36+k/6)%1,p=point(t);ctx.fillStyle='#d9ffcb';ctx.shadowBlur=8;ctx.shadowColor=COLOR;ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;}
-        for(const pulse of pulses.filter(p=>p.plug===plug)){const p=point(clamp(pulse.age/.65,0,1));ctx.fillStyle='#e4ffdd';ctx.beginPath();ctx.arc(p.x,p.y,7*(1-pulse.age/.8),0,Math.PI*2);ctx.fill();}
-        ctx.save();ctx.translate(end.x,end.y);roundRect(ctx,-13,-9,26,18,5,drag===plug||armed===plug?'#e7ffe3':'#72bfa1',COLOR);ctx.fillStyle='#104441';ctx.fillRect(-6,-3,12,6);ctx.restore();if(armed===plug&&drag===null)badge(ctx,'再点车辆接线',end.x-52,end.y-45,COLOR);
-      }fx.draw(ctx);
+    hard: {
+      score: Number((saved.bestHard as { score?: number } | undefined)?.score) || 0,
+      normalized: Number((saved.bestHard as { normalized?: number } | undefined)?.normalized) || 0,
+      stars: Number((saved.bestHard as { stars?: number } | undefined)?.stars) || 0,
+    },
+  };
+
+  let selectedMode: QuizMode = 'normal';
+  let state: QuizSessionState = createQuizSession('normal');
+  let lockTimer: number | null = null;
+  let lockedOption: number | null = null;
+  let gradingElapsed = 0;
+  let verdictFilter: 'all' | 'wrong' = 'all';
+  let pulseFlash = 0;
+  let disposed = false;
+
+  const totalBankCount = QUIZ_BANK.length;
+  const easyBankCount = QUIZ_BANK.filter(q => q.difficulty === 'easy').length;
+  const hardBankCount = QUIZ_BANK.filter(q => q.difficulty === 'hard').length;
+
+  host.innerHTML = `<div class="cq-shell">
+    <div class="cq-topbar">
+      <div class="cq-modes" role="group" aria-label="选择问答难度">
+        <button type="button" class="cq-mode-btn" data-mode="normal" aria-pressed="true">
+          <span>⚡ 普通模式</span>
+          <small>5简单 + 5困难</small>
+        </button>
+        <button type="button" class="cq-mode-btn" data-mode="hard" aria-pressed="false">
+          <span>🔥 困难模式</span>
+          <small>10道全困难</small>
+        </button>
+      </div>
+      <div class="cq-top-meta">
+        <span class="cq-pill">📚 ${totalBankCount} 题中国智驾题库 · 随机抽 ${QUIZ_QUESTION_COUNT} 题</span>
+        <span class="cq-pill">⏱️ 每题 ${QUIZ_TIME_LIMIT}s 限时 · 🤖 AI 终审评分</span>
+        <button type="button" class="btn btn-small" data-redraw>🔄 重新抽题</button>
+      </div>
+    </div>
+
+    <div class="cq-stage-wrap">
+      <div data-stage></div>
+    </div>
+
+    <section class="cq-board" aria-live="polite">
+      <!-- 1. READY VIEW -->
+      <div data-view="ready" style="display:grid;gap:14px">
+        <div class="cq-intro-grid">
+          <button type="button" class="cq-tier-card is-selected" data-pick-mode="normal">
+            <div class="cq-tier-head">
+              <h3>⚡ 普通模式</h3>
+              <span class="cq-tier-badge">最高 1250 分</span>
+            </div>
+            <p>从 ${totalBankCount} 道中国智能驾驶题库中随机抽取 <strong>5 道简单题 + 5 道困难题</strong>，循序覆盖智驾感知、车路云、超充网络与国标安全。</p>
+            <div class="cq-tier-tags">
+              <span>简单题 × 5（最高 ${QUIZ_SCORING.easy.max} 分/题）</span>
+              <span>困难题 × 5（最高 ${QUIZ_SCORING.hard.max} 分/题）</span>
+              <span data-best-normal>历史最佳：${bestByMode.normal.score ? `${bestByMode.normal.score} 分 ${starText(bestByMode.normal.stars)}` : '待挑战'}</span>
+            </div>
+          </button>
+
+          <button type="button" class="cq-tier-card is-hard" data-pick-mode="hard">
+            <div class="cq-tier-head">
+              <h3>🔥 困难模式</h3>
+              <span class="cq-tier-badge">最高 1500 分</span>
+            </div>
+            <p>从 ${hardBankCount} 道高难专家题池中随机抽取 <strong>10 道全困难题</strong>，直击 L3/L4 准入试点、端到端大模型、C-V2X、800V/ChaoJi 超充与功能安全！</p>
+            <div class="cq-tier-tags">
+              <span>困难题 × 10（最高 ${QUIZ_SCORING.hard.max} 分/题）</span>
+              <span>高难加权倍率 × 1.5</span>
+              <span data-best-hard>历史最佳：${bestByMode.hard.score ? `${bestByMode.hard.score} 分 ${starText(bestByMode.hard.stars)}` : '待挑战'}</span>
+            </div>
+          </button>
+        </div>
+
+        <div class="cq-rule-strip">
+          <div class="cq-rule-box"><span>题库规模</span><strong>${totalBankCount} 题（${easyBankCount} 简 / ${hardBankCount} 难）</strong></div>
+          <div class="cq-rule-box"><span>每题限时</span><strong>${QUIZ_TIME_LIMIT} 秒倒计时</strong></div>
+          <div class="cq-rule-box"><span>判卷机制</span><strong>答完 10 题由 AI 统一判题</strong></div>
+          <div class="cq-rule-box"><span>AI 评分维度</span><strong>题目难度 × 剩余时间加权</strong></div>
+        </div>
+
+        <div class="cq-start-row">
+          <span style="font-size:12px;color:#99b8d4">💡 提示：作答期间不提前剧透答案，支持键盘 <kbd style="padding:1px 5px;border:1px solid #355477;border-radius:4px;background:#0a1629;color:#8eeeff">A-D</kbd> 或 <kbd style="padding:1px 5px;border:1px solid #355477;border-radius:4px;background:#0a1629;color:#8eeeff">1-4</kbd> 疾速抢答以赢取更高 AI 时间加权分！</span>
+          <button type="button" class="cq-start-btn" data-start>⚡ 开始随机抽题挑战</button>
+        </div>
+      </div>
+
+      <!-- 2. PLAYING VIEW -->
+      <div data-view="playing" hidden style="display:grid;gap:14px">
+        <div class="cq-q-head">
+          <div class="cq-q-badges">
+            <span class="cq-q-num" data-q-num>第 01 / 10 题</span>
+            <span class="cq-diff-tag is-easy" data-q-diff>简单题 · 最高 100 分</span>
+            <span class="cq-cat-tag" data-q-cat>中国标准</span>
+          </div>
+          <div class="cq-timer-box" data-timer-box>
+            <span style="font-size:11px;color:#9ab9d6">剩余时间</span>
+            <strong data-timer-text>25.0s</strong>
+          </div>
+        </div>
+
+        <div class="cq-timer-bar" data-timer-bar><i data-timer-fill></i></div>
+
+        <h2 class="cq-prompt" data-q-prompt></h2>
+
+        <div class="cq-options" data-q-options></div>
+
+        <div class="cq-playing-foot">
+          <span data-playing-hint>🔒 答案将暂存至 AI 阅卷队列，完成全部 10 题后由 AI 智能判题揭晓真相与评分。</span>
+          <span data-answered-count>已提交 0 / 10 题</span>
+        </div>
+      </div>
+
+      <!-- 3. AI GRADING VIEW -->
+      <div data-view="grading" hidden>
+        <div class="cq-grading-box">
+          <span class="cq-pill" style="border-color:#75f1bb;color:#75f1bb">🤖 AI SMART GRADING ENGINE</span>
+          <h3>AI 智驾评审官正在智能判题中…</h3>
+          <p data-grading-step>正在核验 10 道题目答案、计算难度系数与剩余时间反应加权…</p>
+          <div class="cq-grading-bar"><i data-grading-fill></i></div>
+        </div>
+      </div>
+
+      <!-- 4. FINISHED AI REPORT VIEW -->
+      <div data-view="finished" hidden style="display:grid;gap:16px">
+        <div class="cq-report-hero">
+          <div class="cq-rank-orb" data-rank-orb>
+            <div>
+              <strong data-rank-code>S</strong>
+              <span data-rank-stars>★★★</span>
+            </div>
+          </div>
+          <div class="cq-report-summary">
+            <div class="cq-report-title-row">
+              <h3 data-rank-title>AI 智能判题报告</h3>
+              <div class="cq-score-big" data-score-big>0 <small>/ 1250 分</small></div>
+            </div>
+            <p class="cq-ai-comment" data-ai-comment></p>
+          </div>
+        </div>
+
+        <div class="cq-dim-grid" data-dim-grid></div>
+
+        <div class="cq-verdict-toolbar">
+          <h4>📋 10 题 AI 逐题判卷与权威解析</h4>
+          <div class="cq-filter-group" role="group" aria-label="筛选判卷明细">
+            <button type="button" data-filter="all" aria-pressed="true">全部 10 题</button>
+            <button type="button" data-filter="wrong" aria-pressed="false">仅看错题 / 超时</button>
+          </div>
+        </div>
+
+        <div class="cq-verdict-list" data-verdict-list></div>
+
+        <div class="cq-report-actions">
+          <button type="button" class="btn" data-save>📸 保存 AI 成绩单</button>
+          <button type="button" class="btn" data-switch-other>🔥 切换困难模式挑战</button>
+          <button type="button" class="btn btn-primary" data-again>🔄 再抽 10 题继续挑战</button>
+        </div>
+      </div>
+    </section>
+  </div>`;
+
+  const q = <T extends HTMLElement = HTMLElement>(s: string) => host.querySelector<T>(s)!;
+
+  function clearLockTimer() {
+    if (lockTimer !== null) {
+      window.clearTimeout(lockTimer);
+      lockTimer = null;
     }
+    lockedOption = null;
+  }
+
+  function switchMode(mode: QuizMode, autoStart = false) {
+    clearLockTimer();
+    selectedMode = mode;
+    state = createQuizSession(mode);
+    gradingElapsed = 0;
+    verdictFilter = 'all';
+    if (autoStart) startQuizSession(state);
+    renderUI();
+  }
+
+  function renderQuestion() {
+    const item = state.questions[state.currentIdx];
+    if (!item) return;
+    q('[data-q-num]').textContent = `第 ${String(state.currentIdx + 1).padStart(2, '0')} / ${QUIZ_QUESTION_COUNT} 题`;
+    const diffEl = q('[data-q-diff]');
+    const isHard = item.difficulty === 'hard';
+    diffEl.className = `cq-diff-tag ${isHard ? 'is-hard' : 'is-easy'}`;
+    diffEl.textContent = isHard
+      ? `🔥 困难题 · 基础 ${QUIZ_SCORING.hard.base} + 时间奖最高 ${QUIZ_SCORING.hard.speedMax}`
+      : `⚡ 简单题 · 基础 ${QUIZ_SCORING.easy.base} + 时间奖最高 ${QUIZ_SCORING.easy.speedMax}`;
+    q('[data-q-cat]').textContent = item.category;
+    q('[data-q-prompt]').textContent = item.prompt;
+    q('[data-answered-count]').textContent = `已提交 ${state.submissions.length} / ${QUIZ_QUESTION_COUNT} 题`;
+    q('[data-playing-hint]').textContent = lockedOption !== null
+      ? '✅ 已锁定本作答并推送至 AI 阅卷队列，正在切入下一题…'
+      : '🔒 作答期间暂不公布对错，完成全部 10 题后由 AI 结合难度与剩余时间统一判题评分。';
+
+    const optsBox = q('[data-q-options]');
+    optsBox.innerHTML = item.options.map((text, idx) => `
+      <button type="button" class="cq-opt-btn ${lockedOption === idx ? 'is-locked' : ''}" data-opt="${idx}" ${lockedOption !== null ? 'disabled' : ''}>
+        <span class="cq-opt-key">${LETTERS[idx]}</span>
+        <span>${text}</span>
+      </button>
+    `).join('');
+
+    optsBox.querySelectorAll<HTMLButtonElement>('[data-opt]').forEach(btn => {
+      btn.addEventListener('click', () => handleOptionSelect(Number(btn.dataset.opt)));
+    });
+    updateTimerDOM();
+  }
+
+  function updateTimerDOM() {
+    if (state.status !== 'playing') return;
+    const t = Math.max(0, state.timeLeft);
+    const pct = Math.max(0, Math.min(100, (t / QUIZ_TIME_LIMIT) * 100));
+    const level = t <= 5 ? 'is-danger' : t <= 10 ? 'is-warn' : '';
+    const box = q('[data-timer-box]');
+    box.className = `cq-timer-box ${level}`;
+    q('[data-timer-text]').textContent = `${t.toFixed(1)}s`;
+    const bar = q('[data-timer-bar]');
+    bar.className = `cq-timer-bar ${level}`;
+    q('[data-timer-fill]').style.width = `${pct.toFixed(1)}%`;
+  }
+
+  function handleOptionSelect(idx: number) {
+    if (state.status !== 'playing' || lockedOption !== null) return;
+    lockedOption = idx;
+    pulseFlash = 1;
+    api.playCue?.('start');
+    renderQuestion();
+    lockTimer = window.setTimeout(() => {
+      if (disposed) return;
+      lockTimer = null;
+      const chosen = lockedOption;
+      lockedOption = null;
+      if (chosen === null) return;
+      submitQuizAnswer(state, chosen);
+      if (state.status === 'grading') {
+        gradingElapsed = 0;
+        api.playCue?.('boost');
+      }
+      renderUI();
+    }, 260);
+  }
+
+  function renderVerdictList() {
+    const report = state.report;
+    if (!report) return;
+    const items = verdictFilter === 'wrong'
+      ? report.verdicts.filter(v => !v.correct)
+      : report.verdicts;
+
+    const listEl = q('[data-verdict-list]');
+    if (!items.length) {
+      listEl.innerHTML = `<div class="cq-verdict-item is-ok" style="text-align:center;padding:20px">
+        <strong style="color:#75f1bb;font-size:15px">🎉 太强了！本轮 10 道题全部答对，没有任何错题或超时记录！</strong>
+      </div>`;
+      return;
+    }
+
+    listEl.innerHTML = items.map(v => {
+      const isHard = v.question.difficulty === 'hard';
+      const mineText = v.timedOut || v.selectedIndex === null
+        ? '⏱️ 超时未作答'
+        : `${LETTERS[v.selectedIndex]}. ${v.question.options[v.selectedIndex]}`;
+      const correctText = `${LETTERS[v.question.answerIndex]}. ${v.question.options[v.question.answerIndex]}`;
+      const scoreText = v.correct
+        ? `+${v.score} 分（基础 ${v.baseScore} + 速度奖 ${v.speedBonus} / 满 ${v.maxScore}）`
+        : `0 / ${v.maxScore} 分`;
+
+      return `<article class="cq-verdict-item ${v.correct ? 'is-ok' : 'is-bad'}">
+        <div class="cq-verdict-top">
+          <div class="cq-verdict-meta">
+            <span class="cq-q-num" style="font-size:11px;padding:2px 7px">第 ${String(v.index + 1).padStart(2, '0')} 题</span>
+            <span class="cq-diff-tag ${isHard ? 'is-hard' : 'is-easy'}" style="padding:2px 7px">${isHard ? '🔥 困难题' : '⚡ 简单题'}</span>
+            <span class="cq-cat-tag" style="padding:2px 7px">${v.question.category}</span>
+            <span style="color:#8db0d0">剩余 ${v.timeLeft.toFixed(1)}s / ${QUIZ_TIME_LIMIT}s</span>
+          </div>
+          <span class="cq-verdict-score">${v.correct ? '✓' : '✕'} ${scoreText}</span>
+        </div>
+        <p class="cq-verdict-prompt">${v.question.prompt}</p>
+        <div class="cq-verdict-answers">
+          <span class="cq-ans-mine">你的作答：<strong style="color:${v.correct ? '#75f1bb' : '#ff8c96'}">${mineText}</strong></span>
+          <span class="cq-ans-correct">AI 核定标准答案：${correctText}</span>
+        </div>
+        <div class="cq-verdict-ai-note">🤖 ${v.aiNote}</div>
+        <p class="cq-verdict-explain">💡 <strong>中国智驾科普解析：</strong>${v.question.explanation}</p>
+      </article>`;
+    }).join('');
+  }
+
+  function finishAiGrading() {
+    const report = gradeQuizWithAI(state);
+    api.playCue?.(report.stars >= 2 ? 'reward' : 'boost');
+
+    // Update best records & global achievement awards
+    const slot = bestByMode[report.mode];
+    if (report.totalScore > slot.score) {
+      slot.score = report.totalScore;
+      slot.normalized = report.normalizedScore;
+      slot.stars = Math.max(slot.stars, report.stars);
+    }
+
+    api.award('charging', 'quiz-finish', 40, '完成超充智驾 10 题知识挑战');
+    if (report.normalizedScore >= 60) {
+      api.award('charging', 'quiz-pass', 30, `智驾知识擂台达成 ${report.normalizedScore} 分`);
+    }
+    if (report.mode === 'hard' && report.normalizedScore >= 70) {
+      api.award('charging', 'quiz-hard-master', 30, '征服中国智驾困难模式');
+    } else if (report.normalizedScore >= 85) {
+      api.award('charging', 'quiz-ace', 30, '智驾知识擂台高分优胜');
+    }
+    if (report.correctCount >= 6) api.complete('charging');
+
+    const modeName = report.mode === 'hard' ? '困难模式（10道全困难）' : '普通模式（5简+5难）';
+    api.record('charging', {
+      summary: `在「智驾超充知识擂台」完成${modeName}，AI 智能判题综合得分 ${report.totalScore}/${report.maxTotalScore}（${report.normalizedScore} 分 · ${report.rankTitle}），答对 ${report.correctCount}/10 题。`,
+      report: [
+        { label: '挑战难度', value: modeName },
+        { label: 'AI 综合评分', value: `${report.totalScore} / ${report.maxTotalScore}（折合 ${report.normalizedScore} 分）` },
+        { label: 'AI 评级称号', value: `${report.rankCode} · ${report.rankTitle}` },
+        { label: '答题正确率', value: `${report.correctCount} / 10 题（困难题 ${report.hardCorrect}/${report.hardTotal}）` },
+        { label: '时间反应加权', value: `+${report.totalSpeedBonus} 分（平均剩余 ${report.avgTimeLeft.toFixed(1)}s）` },
+      ],
+      bestNormal: bestByMode.normal,
+      bestHard: bestByMode.hard,
+      lastMode: report.mode,
+      lastScore: report.totalScore,
+      lastNormalized: report.normalizedScore,
+    });
+
+    q('[data-best-normal]').textContent = `历史最佳：${bestByMode.normal.score ? `${bestByMode.normal.score} 分 ${starText(bestByMode.normal.stars)}` : '待挑战'}`;
+    q('[data-best-hard]').textContent = `历史最佳：${bestByMode.hard.score ? `${bestByMode.hard.score} 分 ${starText(bestByMode.hard.stars)}` : '待挑战'}`;
+
+    q('[data-rank-code]').textContent = report.rankCode;
+    q('[data-rank-stars]').textContent = starText(report.stars);
+    q('[data-rank-title]').textContent = `${report.rankTitle} · AI 智能判题完成`;
+    q('[data-score-big]').innerHTML = `${report.totalScore} <small>/ ${report.maxTotalScore} 分（折合 ${report.normalizedScore} 分）</small>`;
+    q('[data-ai-comment]').textContent = report.aiComment;
+
+    const orb = q('[data-rank-orb]');
+    const orbCol = report.normalizedScore >= 80 ? '#75f1bb' : report.normalizedScore >= 60 ? '#47eaff' : '#f5bc65';
+    orb.style.borderColor = orbCol;
+    q('[data-rank-code]').style.color = orbCol;
+
+    q('[data-dim-grid]').innerHTML = report.dimensions.map(d => `
+      <div class="cq-dim-card">
+        <div class="cq-dim-head"><span>${d.label}</span><strong>${d.value}%</strong></div>
+        <div class="cq-dim-bar"><i style="width:${d.value}%"></i></div>
+        <small>${d.detail}</small>
+      </div>
+    `).join('');
+
+    const switchBtn = q<HTMLButtonElement>('[data-switch-other]');
+    switchBtn.textContent = report.mode === 'normal' ? '🔥 挑战困难模式（10全难）' : '⚡ 切换普通模式（5简+5难）';
+
+    renderVerdictList();
+    renderUI();
+  }
+
+  function renderUI() {
+    host.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(btn => {
+      btn.setAttribute('aria-pressed', String(btn.dataset.mode === selectedMode));
+    });
+    host.querySelectorAll<HTMLButtonElement>('[data-pick-mode]').forEach(btn => {
+      btn.classList.toggle('is-selected', btn.dataset.pickMode === selectedMode);
+    });
+    host.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach(btn => {
+      btn.setAttribute('aria-pressed', String(btn.dataset.filter === verdictFilter));
+    });
+
+    q('[data-view="ready"]').hidden = state.status !== 'ready';
+    q('[data-view="playing"]').hidden = state.status !== 'playing';
+    q('[data-view="grading"]').hidden = state.status !== 'grading';
+    q('[data-view="finished"]').hidden = state.status !== 'finished';
+
+    if (state.status === 'playing') {
+      renderQuestion();
+    }
+  }
+
+  function drawSuperchargeStage(ctx: CanvasRenderingContext2D, time: number) {
+    const v = api.getVehicle();
+    const reduced = api.reducedMotion();
+
+    // Cyber dark supercharge hub backdrop (1000 x 216)
+    const bg = ctx.createLinearGradient(0, 0, 0, 216);
+    bg.addColorStop(0, '#071122');
+    bg.addColorStop(1, '#0e1e38');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 1000, 216);
+
+    // Subtle holographic grid
+    ctx.strokeStyle = 'rgba(71, 234, 255, 0.06)';
+    ctx.lineWidth = 1;
+    for (let gx = 0; gx <= 1000; gx += 40) {
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, 216); ctx.stroke();
+    }
+    for (let gy = 0; gy <= 216; gy += 36) {
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(1000, gy); ctx.stroke();
+    }
+
+    // Floor platform
+    ctx.fillStyle = '#10233e';
+    ctx.fillRect(0, 178, 1000, 38);
+    ctx.strokeStyle = 'rgba(117, 241, 187, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, 178); ctx.lineTo(1000, 178); ctx.stroke();
+
+    // Left: 800V China Supercharge Tower + Player EV
+    roundRect(ctx, 22, 42, 46, 136, 8, '#0c1c34', '#47eaff');
+    roundRect(ctx, 30, 56, 30, 44, 5, '#071426', '#75f1bb');
+    label(ctx, '800V', 31, 74, 10, '#75f1bb', 800);
+    label(ctx, '超充', 34, 91, 10, '#47eaff', 700);
+
+    // Glowing liquid-cooled cable into EV
+    ctx.strokeStyle = state.status === 'playing' || state.status === 'grading' ? '#75f1bb' : '#3d6386';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(68, 118);
+    ctx.bezierCurveTo(96, 152, 110, 162, 134, 134);
+    ctx.stroke();
+
+    // Animated energy pulse dots flowing along cable
+    if (!reduced && (state.status === 'playing' || state.status === 'grading' || pulseFlash > 0)) {
+      const p = (time * 1.4) % 1;
+      const cx = 68 + (134 - 68) * p;
+      const cy = 118 + Math.sin(p * Math.PI) * 30 + (134 - 118) * p;
+      ctx.fillStyle = '#a7f3d0';
+      ctx.shadowColor = '#75f1bb';
+      ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(cx, cy, 4.5, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // Player EV side profile
+    drawPremiumCar(ctx, 206, 148, v.color, 0.56, 0, v.body);
+    label(ctx, '中国智驾知识超充站 · 100 题库', 22, 26, 12, '#8eeeff', 700);
+
+    // Center: 10-Cell Knowledge Energy Battery Bank (Q01..Q10)
+    const bankX = 336;
+    const bankY = 44;
+    const bankW = 472;
+    const bankH = 116;
+    roundRect(ctx, bankX, bankY, bankW, bankH, 12, 'rgba(8, 19, 38, 0.92)', '#2d4f73');
+    label(ctx, state.mode === 'hard' ? '🔥 困难模式电池阵列（10 题全困难）' : '⚡ 普通模式电池阵列（5 简单 + 5 困难）', bankX + 14, bankY + 21, 11, state.mode === 'hard' ? '#ffd68f' : '#9ff7d3', 700);
+
+    const revealedCount = state.status === 'grading'
+      ? Math.floor((gradingElapsed / 1.35) * QUIZ_QUESTION_COUNT)
+      : state.status === 'finished' ? QUIZ_QUESTION_COUNT : 0;
+
+    const cellGap = 7;
+    const cellW = (bankW - 28 - cellGap * 9) / 10;
+    for (let i = 0; i < QUIZ_QUESTION_COUNT; i++) {
+      const cx = bankX + 14 + i * (cellW + cellGap);
+      const cy = bankY + 34;
+      const ch = 66;
+      const qItem = state.questions[i];
+      const sub = state.submissions[i];
+      const verdict = state.report?.verdicts[i];
+      const isCurrent = state.status === 'playing' && i === state.currentIdx;
+
+      let fill = '#0c1a30';
+      let stroke = '#274260';
+      let badge = `0${i + 1}`.slice(-2);
+      let badgeCol = '#6f92b3';
+      let subLabel = qItem?.difficulty === 'hard' ? '难' : '简';
+
+      if (state.status === 'finished' && verdict) {
+        fill = verdict.correct ? 'rgba(20, 92, 68, 0.72)' : 'rgba(98, 28, 42, 0.72)';
+        stroke = verdict.correct ? '#75f1bb' : '#ff7a84';
+        badge = verdict.correct ? '✓' : '✕';
+        badgeCol = verdict.correct ? '#b9ffe2' : '#ffb3ba';
+        subLabel = verdict.correct ? `${verdict.score}` : '0分';
+      } else if (state.status === 'grading' && i < revealedCount && sub && qItem) {
+        const ok = !sub.timedOut && sub.selectedIndex === qItem.answerIndex;
+        fill = ok ? 'rgba(20, 92, 68, 0.72)' : 'rgba(98, 28, 42, 0.72)';
+        stroke = ok ? '#75f1bb' : '#ff7a84';
+        badge = ok ? '✓' : '✕';
+        badgeCol = ok ? '#b9ffe2' : '#ffb3ba';
+        subLabel = ok ? '通过' : '失分';
+      } else if (sub) {
+        fill = sub.timedOut ? 'rgba(84, 42, 26, 0.6)' : 'rgba(18, 66, 98, 0.75)';
+        stroke = sub.timedOut ? '#f59e0b' : '#47eaff';
+        badge = sub.timedOut ? '⏱' : '●';
+        badgeCol = sub.timedOut ? '#fde68a' : '#8ef4ff';
+        subLabel = sub.timedOut ? '超时' : '待判';
+      } else if (isCurrent) {
+        const pulse = reduced ? 0.85 : 0.65 + Math.sin(time * 6) * 0.35;
+        fill = `rgba(28, 86, 118, ${(0.35 + pulse * 0.25).toFixed(2)})`;
+        stroke = '#75f1bb';
+        badgeCol = '#ffffff';
+      }
+
+      roundRect(ctx, cx, cy, cellW, ch, 7, fill, stroke);
+      // Tiny difficulty dot at top of cell
+      ctx.fillStyle = qItem?.difficulty === 'hard' ? '#f5bc65' : '#47eaff';
+      ctx.beginPath(); ctx.arc(cx + cellW / 2, cy + 10, 3, 0, Math.PI * 2); ctx.fill();
+
+      ctx.font = '800 14px "Microsoft YaHei", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = badgeCol;
+      ctx.fillText(badge, cx + cellW / 2, cy + 37);
+
+      ctx.font = '600 10px "Microsoft YaHei", sans-serif';
+      ctx.fillStyle = '#b4d3ec';
+      ctx.fillText(subLabel, cx + cellW / 2, cy + 56);
+      ctx.textAlign = 'start';
+    }
+
+    // Sweeping AI Neural Scan Beam during grading
+    if (state.status === 'grading') {
+      const scanFrac = Math.min(1, gradingElapsed / 1.35);
+      const sx = bankX + 14 + scanFrac * (bankW - 28);
+      const grad = ctx.createLinearGradient(sx - 28, 0, sx + 8, 0);
+      grad.addColorStop(0, 'rgba(71, 234, 255, 0)');
+      grad.addColorStop(1, 'rgba(117, 241, 187, 0.55)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(sx - 28, bankY + 28, 36, bankH - 36);
+      ctx.strokeStyle = '#d1fae5';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx, bankY + 28); ctx.lineTo(sx, bankY + bankH - 8); ctx.stroke();
+    }
+
+    // Right: Circular 25s Countdown Ring OR AI Final Score Gauge
+    const rx = 902;
+    const ry = 102;
+    const rr = 58;
+    ctx.beginPath(); ctx.arc(rx, ry, rr, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(8, 18, 36, 0.92)'; ctx.fill();
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = '#1b3454'; ctx.stroke();
+
+    let ringFrac = 1;
+    let ringCol = '#47eaff';
+    let bigText = `${QUIZ_TIME_LIMIT}s`;
+    let smallText = '每题限时';
+
+    if (state.status === 'playing') {
+      ringFrac = Math.max(0, state.timeLeft / QUIZ_TIME_LIMIT);
+      ringCol = state.timeLeft <= 5 ? '#ff6b78' : state.timeLeft <= 10 ? '#f5bc65' : '#75f1bb';
+      bigText = `${state.timeLeft.toFixed(1)}s`;
+      smallText = `Q${state.currentIdx + 1} 倒计时`;
+    } else if (state.status === 'grading') {
+      ringFrac = Math.min(1, gradingElapsed / 1.35);
+      ringCol = '#47eaff';
+      bigText = `${Math.round(ringFrac * 100)}%`;
+      smallText = 'AI 判题中';
+    } else if (state.status === 'finished' && state.report) {
+      ringFrac = state.report.normalizedScore / 100;
+      ringCol = state.report.normalizedScore >= 80 ? '#75f1bb' : state.report.normalizedScore >= 60 ? '#47eaff' : '#f5bc65';
+      bigText = `${state.report.normalizedScore}分`;
+      smallText = `AI ${state.report.rankCode} 评级`;
+    }
+
+    ctx.beginPath();
+    ctx.arc(rx, ry, rr, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ringFrac);
+    ctx.strokeStyle = ringCol;
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+
+    ctx.textAlign = 'center';
+    ctx.font = '800 22px "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = '#f2faff';
+    ctx.fillText(bigText, rx, ry + 5);
+    ctx.font = '600 11px "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = ringCol;
+    ctx.fillText(smallText, rx, ry + 26);
+    ctx.textAlign = 'start';
+
+    // Footer status hint on stage
+    const foot = state.status === 'ready'
+      ? '选择普通或困难难度，从 100 题库随机抽取 10 题，完成后由 AI 结合难度与剩余时间智能评分'
+      : state.status === 'playing'
+        ? `当前作答第 ${state.currentIdx + 1}/${QUIZ_QUESTION_COUNT} 题 · 剩 ${state.timeLeft.toFixed(1)} 秒 · 答题越快、难题越准，AI 评分越高`
+        : state.status === 'grading'
+          ? '🤖 AI 智驾评审官正在逐题核验答案并加权计算最终评分…'
+          : `🏆 AI 终审完成：${state.report?.totalScore ?? 0}/${state.report?.maxTotalScore ?? 0} 分 · 答对 ${state.report?.correctCount ?? 0}/10 题`;
+    label(ctx, foot, 22, 202, 11, '#98b8d6', 600);
+  }
+
+  const stage = createStage(q('[data-stage]'), {
+    width: 1000,
+    height: 216,
+    label: '智驾超充知识擂台实时能量与倒计时状态栏',
+    update(dt) {
+      if (pulseFlash > 0) pulseFlash = Math.max(0, pulseFlash - dt * 2.5);
+      if (document.hidden) return;
+
+      if (state.status === 'playing' && lockedOption === null) {
+        const res = tickQuizTimer(state, dt);
+        if (res.timedOut) {
+          api.playCue?.('hit');
+          if ((state.status as QuizSessionState['status']) === 'grading') {
+            gradingElapsed = 0;
+          }
+          renderUI();
+        } else {
+          updateTimerDOM();
+        }
+      } else if (state.status === 'grading') {
+        gradingElapsed += dt;
+        const pct = Math.min(100, Math.round((gradingElapsed / 1.45) * 100));
+        q('[data-grading-fill]').style.width = `${pct}%`;
+        const stepEl = q('[data-grading-step]');
+        if (pct < 38) stepEl.textContent = '1/3 · 正在比对 100 题中国智驾权威知识库核验 10 道作答…';
+        else if (pct < 76) stepEl.textContent = '2/3 · 正在按「题目难度系数 × 25 秒剩余时间」计算速度加权分…';
+        else stepEl.textContent = '3/3 · 正在生成 4 维智驾能力雷达与 AI 专属诊断评语…';
+
+        if (gradingElapsed >= 1.45) {
+          finishAiGrading();
+        }
+      }
+    },
+    draw(ctx, time) {
+      drawSuperchargeStage(ctx, time);
+    },
   });
-  host.querySelectorAll<HTMLElement>('[data-strategy]').forEach(b=>b.addEventListener('click',()=>{const oldStrategy=state.strategy;const oldPower=state.cars.find(c=>c.id===selected)!.power;state.strategy=b.dataset.strategy as 'balanced'|'priority';state.priority=selected;state.adjustments++;allocate(state);if(oldStrategy!==state.strategy&&state.cars.filter(c=>c.connected!==null).length>=2){comparison=`同一接线、电量与供电上限下，切换策略让${state.cars.find(c=>c.id===selected)!.name}的功率从 ${oldPower.toFixed(0)} 变为 ${state.cars.find(c=>c.id===selected)!.power.toFixed(0)} kW。`;}const p=port(selected);fx.pulse(p.x,p.y,COLOR);journal.action();ui.status(state.strategy==='priority'?'选中车辆优先接收，共享供电中其他车辆份额相应减少。':'均衡分配给已连接车辆，仍受每辆车接收上限约束。');updateUI();}));
-  ui.q('[data-pause]').addEventListener('click',()=>{if(!finished){running=!running;ui.status(running?'继续按实际供电补电。':'已暂停：计时、电量增长和能量光流一起停止。');updateUI();}});
-  ui.q('[data-unplug]').addEventListener('click',()=>{const c=state.cars.find(c=>c.id===selected);if(c?.connected!==null&&c?.connected!==undefined)attach(c.connected,null);});
-  host.querySelectorAll<HTMLElement>('[data-speed]').forEach(b=>b.addEventListener('click',()=>{speed=Number(b.dataset.speed);ui.status(`模拟时间 ${speed} 倍；电量仍按同一功率 × 时间模型计算。`);}));
-  host.querySelectorAll<HTMLElement>('[data-scene]').forEach(b=>b.addEventListener('click',()=>reset(Number(b.dataset.scene))));ui.q('[data-reset]').addEventListener('click',()=>reset());ui.q('[data-save]').addEventListener('click',()=>journal.save(ui.media.capture(stage.capture()),finished?undefined:{...result(),success:false,observed:`进行中：实际存入 ${state.delivered.toFixed(2)} kWh，计时 ${state.time.toFixed(1)} min`,comparison:undefined}));
-  const pause=()=>{running=false;drag=armed=null;updateUI();};const visibility=()=>{if(document.hidden)pause();};window.addEventListener('blur',pause);document.addEventListener('visibilitychange',visibility);reset();
-  return {destroy(){pause();ui.media.destroy();stage.destroy();window.removeEventListener('blur',pause);document.removeEventListener('visibilitychange',visibility);}};
+
+  // Event bindings
+  host.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(btn => {
+    btn.addEventListener('click', () => switchMode(btn.dataset.mode as QuizMode, false));
+  });
+  host.querySelectorAll<HTMLButtonElement>('[data-pick-mode]').forEach(btn => {
+    btn.addEventListener('click', () => switchMode(btn.dataset.pickMode as QuizMode, false));
+  });
+  q('[data-start]').addEventListener('click', () => {
+    startQuizSession(state);
+    api.playCue?.('start');
+    renderUI();
+  });
+  q('[data-redraw]').addEventListener('click', () => {
+    switchMode(selectedMode, state.status === 'playing');
+  });
+  q('[data-again]').addEventListener('click', () => {
+    switchMode(selectedMode, true);
+  });
+  q('[data-switch-other]').addEventListener('click', () => {
+    switchMode(selectedMode === 'normal' ? 'hard' : 'normal', true);
+  });
+  q('[data-save]').addEventListener('click', () => {
+    api.saveImage('charging', stage.capture());
+    api.notify('已保存智驾知识擂台 AI 成绩单到作品档案！');
+  });
+  host.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      verdictFilter = btn.dataset.filter as 'all' | 'wrong';
+      host.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach(b =>
+        b.setAttribute('aria-pressed', String(b.dataset.filter === verdictFilter))
+      );
+      renderVerdictList();
+    });
+  });
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (state.status !== 'playing' || lockedOption !== null) return;
+    const keyMap: Record<string, number> = {
+      '1': 0, '2': 1, '3': 2, '4': 3,
+      a: 0, A: 0, b: 1, B: 1, c: 2, C: 2, d: 3, D: 3,
+    };
+    if (e.key in keyMap) {
+      e.preventDefault();
+      handleOptionSelect(keyMap[e.key]);
+    }
+  };
+  window.addEventListener('keydown', onKeyDown);
+
+  renderUI();
+
+  return {
+    destroy() {
+      disposed = true;
+      clearLockTimer();
+      window.removeEventListener('keydown', onKeyDown);
+      stage.destroy();
+    },
+  };
 }

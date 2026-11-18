@@ -1,0 +1,67 @@
+/* Keep navigation utilities reachable independently of the game page. */
+@media (min-width: 601px) {
+  .sidebar { overflow: hidden; }
+  .brand-mark, .sidebar-bottom { flex-shrink: 0; }
+  .side-nav { min-height: 0; flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #3f657d #0a1224; }
+  .side-nav .nav-button { flex-shrink: 0; }
+}
+
+.as-shell, .as-main, .as-topbar, .aib-root { min-width: 0; }
+.as-overlay, .aib-stage-overlay { overflow-y: auto; overscroll-behavior: contain; }
+
+/* Preserve canvas geometry while leaving space for controls in short desktop windows. */
+@media (min-width: 701px) and (max-height: 800px) {
+  .main { padding-top: 12px; }
+  .topbar { padding-bottom: 8px; margin-bottom: 12px; }
+  .game-page-heading { margin-top: 0; margin-bottom: 12px; }
+  .game-title-group h1 { font-size: 23px; margin-bottom: 3px; }
+  .game-title-group .eyebrow { margin-bottom: 3px; }
+  .as-shell, .aib-root { gap: 10px; }
+  .as-topbar { padding: 8px 12px; }
+  .as-stage-wrap { width: min(100%, calc(max(270px, 100dvh - 380px) * 1.8)); margin-inline: auto; }
+  .as-overlay { padding: 14px; gap: 8px; }
+  .as-overlay h2 { font-size: 23px; }
+  .as-overlay p { font-size: 12px; line-height: 1.5; }
+  .aib-stage { width: min(100%, calc(max(260px, 100dvh - 400px) * 1.92)); margin-inline: auto; }
+  .aib-action-dock { padding: 8px; }
+  .aib-action-btn { min-height: 54px; }
+}
+
+/* A normal-flow mobile card keeps long intros and results above the canvas,
+   without stretching the game geometry or cropping the start/retry buttons. */
+@media (max-width: 700px) {
+  .as-overlay, .aib-stage-overlay {
+    position: relative;
+    inset: auto;
+    padding: 16px 12px;
+    gap: 9px;
+    overflow: visible;
+  }
+  .as-stage-wrap:has(> .as-overlay:not([hidden])) > .canvas-stage { display: none; }
+  .aib-stage:has(> .aib-stage-overlay:not([hidden])) {
+    aspect-ratio: auto !important;
+  }
+  .aib-stage:has(> .aib-stage-overlay:not([hidden])) > canvas { visibility: hidden; }
+  .as-overlay h2 { font-size: 22px; }
+  .as-overlay-actions, .aib-overlay-actions { width: 100%; }
+  .as-overlay-actions .btn, .aib-overlay-actions .btn { flex: 1 1 180px; min-height: 44px; }
+  .as-overlay-metrics { width: 100%; }
+  .as-overlay-metrics span { flex: 1 1 100px; min-width: 0; }
+}
+
+/* Override the zoom cluster's no-wrap rule for the weather toolbar only. */
+.perception-photo-actions > .perception-weather-controls { flex-shrink: 1; flex-wrap: wrap; min-width: 0; max-width: 100%; }
+@media (max-width: 700px) {
+  .perception-photo-actions > .perception-weather-controls { width: 100%; margin-left: 0; }
+  .perception-weather-item { flex: 1 1 180px; min-width: 0; }
+  .perception-weather-item input[type='range'] { width: 0; min-width: 30px; flex: 1; }
+  .perception-weather-controls .perception-clear-weather { min-height: 44px; }
+  .perception-scene-picker { grid-template-columns: repeat(6, minmax(116px, 1fr)); overflow-x: auto; padding-bottom: 4px; }
+  .perception-sensor-bar { gap: 6px; padding: 6px; }
+  .perception-sensor-bar .perception-sensor-row { gap: 4px; }
+  .perception-sensor-bar .perception-sensor { padding: 5px; }
+}
+
+@media print {
+  .as-stage-wrap, .aib-stage { width: 100%; }
+}

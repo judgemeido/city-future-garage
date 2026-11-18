@@ -12,7 +12,7 @@ async function check(name,run){try{await run();console.log('PASS',name);}catch(e
   if(base.startsWith('file:'))await context.setOffline(true);
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   fs.mkdirSync('output/playwright',{recursive:true});
-  const visit=async id=>{const target=new URL(base+'#'+id).href;if(page.url()===target)await page.reload();else await page.goto(target);if(ids.includes(id))await page.waitForSelector('.lab-stage canvas[data-logical-width]');await page.waitForTimeout(120);};
+  const visit=async id=>{const target=new URL(base+'#'+id).href;if(page.url()===target)await page.reload();else await page.goto(target);if(id==='grip')await page.locator('[data-grip-mode="lab"]').click();if(ids.includes(id))await page.waitForSelector('.lab-stage canvas[data-logical-width]');await page.waitForTimeout(120);};
   const data=()=>page.locator('#game-host').evaluate(el=>({...el.dataset}));
   const record=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('city-future-garage-v1')));
   const point=async(x,y)=>{const b=await page.locator('.lab-stage canvas').boundingBox();return{x:b.x+x*b.width/1000,y:b.y+y*b.height/500};};

@@ -1,6 +1,5 @@
 @import url('./games/perception.css');
 @import url('./games/factory.css');
-@import url('./games/ai.css');
 @import url('./games/regen.css');
 
 :root{font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;color:#24382c;background:#eef1e9;font-synthesis:none;--ink:#24382c;--muted:#7c8a7e;--green:#34774f;--line:#dfe5db;--surface:#fffef9;--accent:#427e51;--radius:22px}
@@ -31,7 +30,7 @@
 .stage-bar>*,.game-bottom-nav>*{min-width:0}
 .profile-copy strong{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .score-pill{flex-shrink:0}
-.sidebar{overflow-y:auto;overscroll-behavior:contain}
+.sidebar{overflow-y:auto}
 @media(max-width:1150px){.experience:not(.perception-experience):not(.ai-experience){grid-template-columns:minmax(0,1fr)}.factory-experience .factory-controls{display:block}.factory-test-heading{flex-wrap:wrap}.factory-drive-actions{margin-left:0}.experience:not(.perception-experience):not(.ai-experience)>.control-panel{display:block}}
 @media(max-width:900px){.main{width:calc(100% - 70px)}}
 @media(max-width:600px){.main{width:calc(100% - 58px)}.game-heading-actions{align-self:flex-start}.hero-actions{flex-wrap:wrap}.section-note{line-height:1.6}.site-footer{flex-wrap:wrap}.factory-colors{flex-wrap:wrap}.factory-save-row{flex-wrap:wrap}.factory-save-row>.btn{min-width:0}.factory-experience .factory-controls{min-width:0}.ai-experience .ai-road-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}

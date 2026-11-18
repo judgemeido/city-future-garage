@@ -9,6 +9,8 @@ async function check(name, run) {
   catch (error) { failures.push(name); console.error('FAIL', name, error.message); }
 }
 (async () => {
+  const { PERCEPTION_SCENES } = await import('../src/games/perception-scenes.ts');
+  const { clickTargetAt } = await import('../src/games/perception-annotations.ts');
   const browser = await chromium.launch({ headless: true, channel: process.env.QA_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined) });
   const page = await browser.newPage();
   if (base.startsWith('file:')) await page.context().setOffline(true);
@@ -19,6 +21,23 @@ async function check(name, run) {
     await page.goto(`${base}#${route}`);
     await page.waitForLoadState('networkidle');
     if (['perception', 'factory', 'ai', 'regen'].includes(route)) await page.waitForSelector('canvas[data-logical-width]');
+    if (route === 'perception') await page.locator('.perception-experiment-settings').evaluate(el => el.open = true);
+  };
+  const clickGoal = async id => {
+    const sceneId = await page.locator('.perception-experience').getAttribute('data-scene');
+    const scene = PERCEPTION_SCENES.find(item => item.id === sceneId), target = scene.targets.find(item => item.id === id);
+    let point;
+    for(let row=1;row<10&&!point;row++)for(let col=1;col<10;col++) {
+      const x=target.x+target.w*col/10,y=target.y+target.h*row/10;
+      if(clickTargetAt(scene.targets,{x:0,y:0,w:1,h:1},x,y)?.id===id){point={x,y};break;}
+    }
+    assert.ok(point,`target ${id} needs a real click location`);
+    await page.locator('.perception-photo-viewport').scrollIntoViewIfNeeded();
+    const p = await page.evaluate(({x,y})=>{
+      const b=document.querySelector('.perception-playfield canvas').getBoundingClientRect(),photo=document.querySelector('.perception-scene[aria-pressed=true] img'),scale=Math.min(968/photo.naturalWidth,602/photo.naturalHeight),w=photo.naturalWidth*scale,h=photo.naturalHeight*scale;
+      return{x:b.x+(16+(968-w)/2+x*w)/1000*b.width,y:b.y+(40+(602-h)/2+y*h)/660*b.height};
+    },point);
+    await page.mouse.click(p.x,p.y);
   };
   await check('marking requires a click or keyboard confirmation, and restore persists per scene', async () => {
     await page.setViewportSize({ width: 1366, height: 900 }); await visit('perception');
@@ -31,14 +50,14 @@ async function check(name, run) {
     assert.doesNotMatch(await page.locator('.perception-zoom-image').getAttribute('alt'), /手动标记/);
     await page.locator('.perception-zoom-close').click();
     await page.locator('.perception-playfield').screenshot({ path: 'output/responsive/perception-manual-before.png' });
-    const targetPoint = async (x, y) => page.evaluate(({ x, y }) => {
+    const targetPoint = async (x, y) => { await page.locator('.perception-photo-viewport').scrollIntoViewIfNeeded(); return page.evaluate(({ x, y }) => {
       const canvas = document.querySelector('.perception-playfield canvas').getBoundingClientRect();
       const photo = document.querySelector('[data-scene][aria-pressed="true"] img');
       const scale = Math.min(968 / photo.naturalWidth, 602 / photo.naturalHeight);
       const w = photo.naturalWidth * scale, h = photo.naturalHeight * scale;
       return { x: canvas.x + (16 + (968 - w) / 2 + x * w) / 1000 * canvas.width,
         y: canvas.y + (40 + (602 - h) / 2 + y * h) / 660 * canvas.height };
-    }, { x, y });
+    }, { x, y }); };
     await page.locator('[data-view="scan"]').click();
     const car = await targetPoint(.573, .8885);
     await page.mouse.move(car.x, car.y); await page.waitForTimeout(800);
@@ -48,10 +67,12 @@ async function check(name, run) {
     assert.equal(await page.locator('[data-target="vehicle"].is-found').count(), 1);
     await page.locator('[data-target="vehicle"]').click();
     assert.equal(await markedCount(), 1, 'clicking a marked target is idempotent');
+    await page.locator('.perception-zoom-close').click();
+    await page.locator('.perception-playfield').focus();
     const signal = await targetPoint(.2065, .823);
     await page.mouse.move(signal.x, signal.y); await page.waitForTimeout(800);
     assert.equal(await markedCount(), 1, 'moving to another target must not mark it');
-    await page.locator('.perception-playfield').focus(); await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
     assert.equal(await markedCount(), 2);
     await page.locator('.perception-playfield').screenshot({ path: 'output/responsive/perception-manual-marked.png' });
     await page.locator('.perception-photo-zoom').click();
@@ -61,6 +82,8 @@ async function check(name, run) {
     await page.waitForFunction(() => document.querySelector('.perception-experience')?.dataset.imageState === 'ready');
     assert.equal(await markedCount(), 0);
     await page.locator('[data-target="vehicle"]').click();
+    assert.equal(await markedCount(), 0, 'a checklist click only selects the goal');
+    await clickGoal('vehicle');
     await page.locator('.perception-restore').click();
     assert.equal(await markedCount(), 0);
     await page.locator('button[data-scene="hangzhou-qianjiang"]').click();
@@ -79,11 +102,11 @@ async function check(name, run) {
     assert.equal(record.data.scanCompleted, false);
     assert.deepEqual(record.awards, awards);
   });
-  await check('primary perception picture fits a desktop viewport', async () => {
+  await check('primary perception picture uses a larger desktop area', async () => {
     for (const [width, height] of [[1920, 1080], [1920, 900], [1440, 900], [1366, 768], [1280, 720]]) {
       await page.setViewportSize({ width, height }); await visit('perception');
       const rect = await page.locator('.perception-playfield').boundingBox();
-      assert.ok(rect.y + rect.height <= height - 20, `${width}×${height}: picture ends at ${Math.round(rect.y + rect.height)}`);
+      assert.ok(rect.width >= 800, `${width}×${height}: picture is only ${Math.round(rect.width)}px wide`);
     }
   });
   await check('six different scenes load, switch targets and persist selection', async () => {
@@ -108,8 +131,10 @@ async function check(name, run) {
       assert.ok(await image.evaluate(img => img.naturalWidth >= 1000));
       await page.locator('.perception-zoom-close').click();
       for (const target of await page.locator('[data-target]').evaluateAll(elements => elements.map(e => e.dataset.target))) {
-        await page.locator(`[data-target="${target}"]`).click();
+        await clickGoal(target);
         await page.waitForFunction(target => document.querySelector(`[data-target="${target}"]`).classList.contains('is-found'), target);
+        await page.locator(`[data-target="${target}"]`).click();
+        await page.locator('.perception-zoom-close').click();
         await page.locator('.perception-target-zoom').click();
         await image.evaluate(img => img.decode());
         assert.ok(await image.evaluate(img => img.naturalWidth > 0 && img.naturalHeight > 0));
@@ -173,7 +198,7 @@ async function check(name, run) {
     assert.ok(Object.keys(record.data.discoveredByScene).every(id => id.startsWith('hangzhou-')));
     assert.equal(Object.keys(record.awards).filter(key => key.startsWith('target-')).length, 4);
     assert.match(record.data.report.find(row => row.label === '观察场景').value, /钱江新城.*浙江杭州/);
-    await page.locator('[data-target="vehicle"]').click();
+    await clickGoal('vehicle');
     await page.waitForFunction(() => document.querySelector('[data-target="vehicle"]').classList.contains('is-found'));
     await page.locator('.perception-capture').click();
     await page.reload();

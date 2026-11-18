@@ -1,0 +1,41 @@
+module.exports = {
+  appId: 'cn.cityfuture.garage',
+  productName: '城市未来车厂',
+  executableName: 'CityFutureGarage',
+  directories: { output: 'release/windows', buildResources: 'electron' },
+  files: ['electron/*.cjs', 'electron/icon.ico', 'dist/index.html', 'package.json', 'ATTRIBUTION.md', 'docs/windows-offline.md', 'src/assets/vehicles/noto/LICENSE*', '!node_modules/**/*'],
+  asar: true,
+  compression: 'maximum',
+  electronLanguages: ['zh-CN', 'en-US'],
+  npmRebuild: false,
+  electronDist: 'node_modules/electron/dist',
+  win: {
+    target: [{ target: 'nsis', arch: ['x64'] }],
+    icon: 'electron/icon.ico',
+    artifactName: 'CityFutureGarage-Setup-${version}-${arch}.${ext}',
+    requestedExecutionLevel: 'asInvoker',
+  },
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowElevation: true,
+    allowToChangeInstallationDirectory: true,
+    installerLanguages: ['zh_CN'],
+    language: '2052',
+    displayLanguageSelector: false,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true,
+    shortcutName: '城市未来车厂',
+    uninstallDisplayName: '城市未来车厂',
+    deleteAppDataOnUninstall: false,
+    runAfterFinish: true,
+  },
+  portable: {
+    artifactName: '城市未来车厂-双击运行.${ext}',
+    requestExecutionLevel: 'user',
+    // In builder 26.18, true omits UNPACK_DIR_NAME and uses $PLUGINSDIR/app,
+    // which is unique to each launch. Repeated launches cannot delete the
+    // temporary runtime of the existing game window.
+    unpackDirName: true,
+  },
+};

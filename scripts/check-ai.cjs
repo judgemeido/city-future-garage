@@ -14,6 +14,7 @@ const folder=`output/playwright/ai-expanded-${base.startsWith('file:')?'offline'
     await page.clock.install();await page.clock.pauseAt(Date.now()+100);
     const advance=ms=>page.clock.runFor(ms);
     await page.goto(base+'#ai');await advance(500);
+    await page.locator('[data-ai-mode="lab"]').click();await advance(300);
     assert.equal(await page.locator('.ai-road-card').count(),12);
     assert.equal(await page.locator('.ai-action-button').count(),6);
     assert.equal(await page.locator('.ai-run-buttons button').count(),4);
@@ -60,6 +61,7 @@ const folder=`output/playwright/ai-expanded-${base.startsWith('file:')?'offline'
     assert.deepEqual(new Set(record.completedDistricts),new Set(['a','b','c','d']));
     assert.ok(record.correctPredictions>=20,`expected most taught combinations to generalize, got ${record.correctPredictions}`);
     await page.locator('#ai-snapshot').click();await page.reload();await advance(500);
+    await page.locator('[data-ai-mode="lab"]').click();await advance(300);
     record=await stored();assert.equal(record.modelSamples.length,37);assert.equal(record.testPredictions.length,24);
     assert.match(await page.locator('#ai-sample-count').textContent(),/37/);
     console.log('PASS all 36 examples, six actions, four complete districts, records and reload');
@@ -80,6 +82,7 @@ const folder=`output/playwright/ai-expanded-${base.startsWith('file:')?'offline'
     });
     await page.addInitScript(state=>localStorage.setItem('city-future-garage-v1',JSON.stringify(state)),legacyState);
     await page.reload();await advance(500);
+    await page.locator('[data-ai-mode="lab"]').click();await advance(300);
     assert.match(await page.locator('#ai-sample-count').textContent(),/1/);assert.match(await page.locator('#ai-model-status').textContent(),/3/);
     assert.equal(await page.locator('.ai-action-button[data-action="slow"]').getAttribute('aria-pressed'),'true');
     await page.locator('[data-category="emergency"]').click();await page.locator('.ai-action-button[data-action="yield"]').click();

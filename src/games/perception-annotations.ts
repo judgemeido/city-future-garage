@@ -18,9 +18,8 @@ export function scanTargetAt(targets: SceneTarget[], image: AnnotationRect, x: n
 
 export function clickTargetAt(targets: SceneTarget[], image: AnnotationRect, x: number, y: number): SceneTarget | undefined {
   const candidates = targets.map(target => ({ target, rect: annotationRect(target, image) }));
-  const contains = (rect: AnnotationRect, pad: number) => x >= rect.x - pad && x <= rect.x + rect.w + pad && y >= rect.y - pad && y <= rect.y + rect.h + pad;
-  const exact = candidates.filter(item => contains(item.rect, 0));
-  return (exact.length ? exact : candidates.filter(item => contains(item.rect, 5))).sort((a, b) => a.rect.w * a.rect.h - b.rect.w * b.rect.h)[0]?.target;
+  return candidates.filter(({rect}) => x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h)
+    .sort((a, b) => a.rect.w * a.rect.h - b.rect.w * b.rect.h)[0]?.target;
 }
 
 export function drawSceneAnnotations(ctx: CanvasRenderingContext2D, targets: SceneTarget[], image: AnnotationRect, selected: string | null = null, found: ReadonlySet<string> = new Set()) {

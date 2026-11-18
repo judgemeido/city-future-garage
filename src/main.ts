@@ -2,6 +2,9 @@ import './styles.css';
 import { GAME_META as metadata, MAX_SCORE } from './game-catalog';
 import { mounts } from './game-registry';
 import './cyberpunk.css';
+import './report.css';
+import './responsive.css';
+import reportStyles from './report.css?inline';
 import { GAME_COLORS, nightBackdrop } from './theme';
 import { downloadFile, escapeHTML } from './platform';
 import { heroIllustration, cardIllustration, icon } from './visuals';
@@ -28,14 +31,16 @@ function notify(message: string) {
   playChime();
 }
 let audioContext: AudioContext | undefined;
-function playChime() {
+function playChime(kind: 'reward' | 'hit' | 'boost' | 'start' = 'reward') {
   if (state.muted) return;
   try {
     audioContext ??= new AudioContext(); void audioContext.resume();
     const oscillator = audioContext.createOscillator(), gain = audioContext.createGain();
     oscillator.connect(gain); gain.connect(audioContext.destination);
     const time = audioContext.currentTime;
-    oscillator.frequency.setValueAtTime(660, time); oscillator.frequency.exponentialRampToValueAtTime(880, time + .08);
+    const frequencies={reward:[660,990],hit:[180,70],boost:[330,1100],start:[440,660]}[kind];
+    oscillator.type=kind==='hit'?'triangle':'sine';
+    oscillator.frequency.setValueAtTime(frequencies[0], time); oscillator.frequency.exponentialRampToValueAtTime(frequencies[1], time + .12);
     gain.gain.setValueAtTime(.04, time); gain.gain.exponentialRampToValueAtTime(.001, time + .18);
     oscillator.start(time); oscillator.stop(time + .19);
   } catch { /* Sound is optional. */ }
@@ -73,6 +78,7 @@ const api: GameAPI = {
   getRecord(game) { return structuredClone(state.progress[game].data); },
   saveImage(game, image) { if (image.startsWith('data:image/')) { state.progress[game].image = image; state.progress[game].data.imageSummary = state.progress[game].data.summary; saveState(); } },
   notify,
+  playCue: playChime,
   reducedMotion: () => state.reducedMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   getVehicle: () => ({ ...state.vehicle }),
   setVehicle(vehicle) { state.vehicle = sanitizeVehicle(vehicle); saveState(); },
@@ -89,27 +95,44 @@ function header(page: string): string {
 function footer() { return `<footer class="site-footer"><span class="footer-label">城市未来车厂 · 智驾小工程师</span><span>${GAME_IDS.length}款独立体验 · 积分鼓励探索 · 教学仿真</span></footer>`; }
 function renderHome() {
   const completed = GAME_IDS.filter(id => state.progress[id].completed).length;
-  const resume = lastGame || 'perception';
+  const resume = lastGame || 'factory';
   const filters: [GameFilter, string][] = [['all','全部体验'],['build','创造与训练'],['drive','驾驶与能量'],['observe','感知与检测']];
-  return `<section class="hero"><div class="hero-copy"><div class="eyebrow"><i></i> FUTURE CITY GARAGE / 未来车厂</div><h1>点亮夜城，<br>造出<span>你的未来。</span></h1><p>亲手造车、教 AI、规划光轨，探索汽车里的科学。<br>每一次操作，都让眼前的世界发生变化。</p><div class="hero-actions"><a href="#${resume}" class="btn btn-primary">${lastGame ? '继续探索 · ' + metadata[resume].short : '开始体验 · 超级眼睛'} ${icon('arrow', 17)}</a><a href="#report" class="hero-secondary">我的作品 ${icon('arrow', 15)}</a></div><div class="hero-footnote"><span>08 个实验世界</span><span>实物观察 × 实时互动</span></div></div>${heroIllustration(state.vehicle.color, state.vehicle.body)}<span class="hero-coordinate" aria-hidden="true">CITY 2088 / LAB ONLINE</span></section>
+  return `<section class="hero"><div class="hero-copy"><div class="eyebrow"><i></i> FUTURE CITY GARAGE / 未来车厂</div><h1>点亮夜城，<br>造出<span>你的未来。</span></h1><p>亲手造车、教 AI、规划光轨，探索汽车里的科学。<br>每一次操作，都让眼前的世界发生变化。</p><div class="hero-actions"><a href="#${resume}" class="btn btn-primary">${lastGame ? '继续探索 · ' + metadata[resume].short : '开始体验 · 造车工厂'} ${icon('arrow', 17)}</a><a href="#report" class="hero-secondary">我的作品 ${icon('arrow', 15)}</a></div><div class="hero-footnote"><span>08 个实验世界</span><span>实物观察 × 实时互动</span></div></div>${heroIllustration(state.vehicle.color, state.vehicle.body)}<span class="hero-coordinate" aria-hidden="true">CITY 2088 / LAB ONLINE</span></section>
   <section class="explore-section" aria-labelledby="explore-title"><div class="section-heading"><div><div class="eyebrow">CHOOSE YOUR MISSION</div><h2 id="explore-title">下一站，探索什么？</h2><p>每个体验随时进入，积分鼓励你的每一次尝试。</p></div><div class="journey-progress"><span>探索进度 <b><span data-stamp-count>${completed}</span> / 8</b></span><div class="journey-dots" aria-label="八枚体验章">${GAME_IDS.map(id => `<span class="${state.progress[id].completed ? 'complete' : ''}" title="${metadata[id].short}：${state.progress[id].completed ? '已体验' : '待探索'}" style="--game-color:${GAME_COLORS[id]}"></span>`).join('')}</div></div></div>
   <div class="game-filters" role="group" aria-label="按类别选择游戏">${filters.map(([value,label]) => `<button data-filter="${value}" aria-pressed="${gameFilter === value}">${label}<span>${filterGames[value].length}</span></button>`).join('')}<span class="filter-result" aria-live="polite" data-filter-result>${filterGames[gameFilter].length} 个体验可进入</span></div>
   <div class="games-grid">${GAME_IDS.map((id, i) => `<a href="#${id}" class="game-card" data-game-card="${id}" style="--game-color:${GAME_COLORS[id]}" ${filterGames[gameFilter].includes(id) ? '' : 'hidden'}><div class="card-art">${cardIllustration(id)}<span class="card-number">LAB / 0${i + 1}</span><span class="card-badge" data-stamp="${id}">${state.progress[id].completed ? '已体验' : '随时可玩'}</span></div><div class="card-content"><span class="card-tag">${metadata[id].tag}</span><h3>${metadata[id].title}</h3><p>${metadata[id].description}</p><div class="card-bottom"><span>进入实验 <span class="card-score">· <span data-score="${id}">${score(state.progress[id])}</span> / 100</span></span><span class="card-go">${icon('arrow', 16)}</span></div></div></a>`).join('')}</div></section>
   <div class="class-banner"><div class="class-banner-main"><span class="class-banner-icon">${icon('report', 23)}</span><div><strong>你的发现，值得留下。</strong><p>把车辆设计、实物观察和实验记录，带进自己的未来车档案。</p></div></div><a href="#report" class="btn btn-small">查看我的作品 ${icon('arrow', 14)}</a></div>`;
 }
-function reportCard(id: GameId): string {
+function reportCard(id: GameId, previewImages: boolean): string {
   const p = state.progress[id], data = p.data;
   const status = p.completed ? '已体验' : Object.keys(data).length || score(p) ? '进行中' : '还没体验';
   const entries = Array.isArray(data.report) ? (data.report as {label: unknown; value: unknown}[]).filter(item => item && 'label' in item && 'value' in item).slice(0, 12) : [];
-  return `<article class="report-card"><div class="report-card-heading"><h2>${metadata[id].title}</h2><span class="stamp-chip ${p.completed ? 'complete' : ''}">${status} · ${score(p)} 分</span></div>${p.image ? `<img src="${p.image}" alt="${metadata[id].title}的个人作品"/>${data.imageSummary ? `<p class="report-image-caption">已保存画面：${escapeHTML(data.imageSummary)}</p>` : ''}` : `<div class="report-placeholder">${icon(metadata[id].icon, 34)}<span>${p.completed ? '体验已记录，可以回去保存一张作品图' : status === '进行中' ? '已开始探索，继续完成体验' : '这个世界等你来探索'}</span></div>`}<div class="report-card-content"><p>${escapeHTML(data.summary || (p.completed ? '一次尝试，一个新发现。' : '随时可以进入体验，之后再更新报告。'))}</p>${entries.map(item => `<div class="report-record"><span>${escapeHTML(item.label)}</span><b>${escapeHTML(item.value)}</b></div>`).join('')}${!entries.length ? `<div class="report-record"><span>我的记录</span><b>${p.completed ? '体验章已收集' : status}</b></div>` : ''}</div></article>`;
+  const image = p.image ? `<img src="${p.image}" alt="${metadata[id].title}的个人作品"/>` : '';
+  const imagePreview = previewImages ? `<button class="report-image-preview" data-report-image="${id}" aria-label="查看${metadata[id].title}的完整作品图片">${image}<span>查看完整图片 ${icon('arrow', 14)}</span></button>` : image;
+  return `<article class="report-card"><div class="report-card-heading"><h2>${metadata[id].title}</h2><span class="stamp-chip ${p.completed ? 'complete' : ''}">${status} · ${score(p)} 分</span></div>${p.image ? `${imagePreview}${data.imageSummary ? `<p class="report-image-caption">已保存画面：${escapeHTML(data.imageSummary)}</p>` : ''}` : `<div class="report-placeholder">${icon(metadata[id].icon, 34)}<span>${p.completed ? '体验已记录，可以回去保存一张作品图' : status === '进行中' ? '已开始探索，继续完成体验' : '这个世界等你来探索'}</span></div>`}<div class="report-card-content"><p>${escapeHTML(data.summary || (p.completed ? '一次尝试，一个新发现。' : '随时可以进入体验，之后再更新报告。'))}</p>${entries.map(item => `<div class="report-record"><span>${escapeHTML(item.label)}</span><b>${escapeHTML(item.value)}</b></div>`).join('')}${!entries.length ? `<div class="report-record"><span>我的记录</span><b>${p.completed ? '体验章已收集' : status}</b></div>` : ''}</div></article>`;
 }
-function renderReport() {
-  return `<section class="report-hero"><div><div class="eyebrow">MY ENGINEERING JOURNEY</div><h1>${escapeHTML(state.profile.nickname)}的未来车档案</h1><p>工位 ${escapeHTML(state.profile.workstation)} · 车辆「${escapeHTML(state.vehicle.name)}」<br>收集了 ${GAME_IDS.filter(id => state.progress[id].completed).length} 枚体验章，获得 ${totalScore(state)} / ${MAX_SCORE} 成就积分。</p><div class="report-actions"><button class="btn btn-primary" data-action="download-report">${icon('download', 16)} 下载电子报告</button><button class="btn" data-action="print-report">打印 / 保存 PDF</button><button class="btn" data-action="vehicle-png">下载车辆作品</button></div></div><div class="report-cover-art">${heroIllustration(state.vehicle.color, state.vehicle.body)}</div></section><div class="report-grid">${GAME_IDS.map(reportCard).join('')}</div><p class="report-disclaimer">成就积分记录参与与探索；科学记录来自教学仿真，不代表真实车辆测评。实物照片与作者、许可见各作品来源记录和图内署名；Wikimedia Commons 素材配人工标注与教学叠层。报告可以随时下载，未体验项目会保留真实状态。</p>`;
+function renderReport(previewImages = false) {
+  return `<section class="report-hero"><div><div class="eyebrow">MY ENGINEERING JOURNEY</div><h1>${escapeHTML(state.profile.nickname)}的未来车档案</h1><p>工位 ${escapeHTML(state.profile.workstation)} · 车辆「${escapeHTML(state.vehicle.name)}」<br>收集了 ${GAME_IDS.filter(id => state.progress[id].completed).length} 枚体验章，获得 ${totalScore(state)} / ${MAX_SCORE} 成就积分。</p><div class="report-actions"><button class="btn btn-primary" data-action="download-report">${icon('download', 16)} 下载电子报告</button><button class="btn" data-action="print-report">打印 / 保存 PDF</button><button class="btn" data-action="vehicle-png">下载车辆作品</button></div></div><div class="report-cover-art">${heroIllustration(state.vehicle.color, state.vehicle.body)}</div></section><div class="report-grid">${GAME_IDS.map(id => reportCard(id, previewImages)).join('')}</div><p class="report-disclaimer">成就积分记录参与与探索；科学记录来自教学仿真，不代表真实车辆测评。实物照片与作者、许可见各作品来源记录和图内署名；Wikimedia Commons 素材配人工标注与教学叠层。报告可以随时下载，未体验项目会保留真实状态。</p>`;
+}
+function showReportImage(id: GameId) {
+  const image = state.progress[id]?.image;
+  if (!image) return;
+  const trigger = document.activeElement as HTMLElement | null;
+  const dialog = document.createElement('dialog');
+  dialog.className = 'report-image-dialog';
+  dialog.setAttribute('aria-labelledby', 'report-image-title');
+  dialog.innerHTML = `<div class="report-image-dialog-bar"><h2 id="report-image-title">${metadata[id].title} · 完整作品图片</h2><button class="btn" data-close-report-image aria-label="关闭完整图片">关闭</button></div><img src="${image}" alt="${metadata[id].title}的完整个人作品"/>`;
+  document.body.append(dialog);
+  dialog.querySelector('[data-close-report-image]')!.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  dialog.addEventListener('close', () => { dialog.remove(); trigger?.focus({ preventScroll: true }); });
+  dialog.showModal();
+  dialog.querySelector<HTMLButtonElement>('[data-close-report-image]')!.focus();
 }
 function saveReport() {
   const printable = `<style>
   *{box-sizing:border-box}body{margin:0;background:#080e1d;color:#e8f3ff;font-family:"Microsoft YaHei",sans-serif}.document{max-width:1080px;margin:auto;padding:36px}.report-hero{background:linear-gradient(120deg,#14243a,#1a1e36);border:1px solid #2d455d;border-radius:16px;padding:26px;display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;gap:20px}.report-hero h1{font-size:26px}.report-hero p{color:#b1c4d8;font-size:13px;line-height:1.8}.eyebrow{font-size:10px;color:#47eaff;letter-spacing:2px}.report-cover-art{width:230px;flex:none}.report-cover-art svg{width:100%;height:auto}.report-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.report-card{background:#111c2e;border:1px solid #2c4058;border-radius:12px;overflow:hidden;break-inside:avoid}.report-card-heading{display:flex;justify-content:space-between;padding:16px 20px;gap:10px;align-items:center}.report-card-heading h2{font-size:16px;margin:0}.stamp-chip{font-size:10px;color:#a6bcd2}.stamp-chip.complete{color:#75f1bb}.report-card img{width:100%;display:block}.report-image-caption{margin:0;padding:10px 20px;background:#16243a;color:#adbed3;font-size:11px;line-height:1.7}.report-card-content{padding:17px 20px}.report-card-content p{font-size:12px;line-height:1.8;color:#b0c5d9}.report-record{display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #2c4058;padding:9px 0;font-size:11px}.report-record span{color:#a0b6cc}.report-record b{font-weight:500;min-width:0;overflow-wrap:anywhere;text-align:right}.report-placeholder{min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#92b2ce;background:#0b1628;font-size:12px}.report-actions{display:none}.report-disclaimer{font-size:10px;color:#9db2c7;line-height:1.8}.print-button{padding:12px 18px;border:0;border-radius:8px;background:#47eaff;color:#081321;font-weight:700;cursor:pointer;margin-bottom:16px}@media(max-width:650px){.document{padding:15px}.report-grid{grid-template-columns:1fr}.report-cover-art{display:none}}@media print{body{color:#18293b;background:white}.print-button{display:none}.document{padding:0}.report-hero,.report-card,.report-placeholder,.report-image-caption{background:white;border-color:#bac7d4;color:#263c51}.report-hero p,.report-card-content p,.report-record span,.report-disclaimer,.eyebrow,.stamp-chip{color:#40556c}.report-record{border-color:#cbd4de}.report-card img{max-height:170px;object-fit:contain}.report-hero{padding:15px}.report-card-content{padding:12px}}
-  </style>`;
+  ${reportStyles}</style>`;
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHTML(state.profile.nickname)}的未来车报告</title>${printable}</head><body><main class="document"><button class="print-button" onclick="window.print()">打印 / 保存 PDF</button>${renderReport()}</main></body></html>`;
   downloadFile(`${state.profile.nickname}-未来车报告.html`, html); notify('电子报告已生成，带上今天的作品吧！');
 }
@@ -143,7 +166,7 @@ function render() {
   app.innerHTML = `<div class="layout">${sidebar(page)}<main class="main">${header(page)}<div id="page-content" tabindex="-1"></div>${footer()}</main></div>`;
   const content = app.querySelector<HTMLDivElement>('#page-content')!;
   if (page === 'home') content.innerHTML = renderHome();
-  else if (page === 'report') content.innerHTML = renderReport();
+  else if (page === 'report') content.innerHTML = renderReport(true);
   else {
     const id = page as GameId, m = metadata[id];
     lastGame = id; try { localStorage.setItem('city-future-garage-last-game', id); } catch { /* The game still works without resume storage. */ }
@@ -155,6 +178,8 @@ function render() {
 }
 app.addEventListener('click', event => {
   const target = event.target as Element;
+  const reportImage = target.closest<HTMLButtonElement>('[data-report-image]')?.dataset.reportImage as GameId | undefined;
+  if (reportImage && GAME_IDS.includes(reportImage)) { showReportImage(reportImage); return; }
   if (target.closest('.skip-link')) { event.preventDefault(); app.querySelector<HTMLElement>('#page-content')?.focus(); return; }
   const filter = target.closest<HTMLButtonElement>('[data-filter]')?.dataset.filter as GameFilter | undefined;
   if (filter && filter in filterGames) {
@@ -168,7 +193,10 @@ app.addEventListener('click', event => {
   if (action === 'motion') { state.reducedMotion = !state.reducedMotion; saveState(); const button = app.querySelector('[data-action="motion"]')!; button.setAttribute('aria-pressed', String(state.reducedMotion)); button.innerHTML = `${icon('eye',20)}<span>${state.reducedMotion ? '减少动效' : '完整动效'}</span>`; document.documentElement.classList.toggle('reduce-motion', state.reducedMotion); notify(state.reducedMotion ? '减少动效已开启，状态和结果仍清楚显示' : '完整动效已开启'); }
   if (action === 'sound') { state.muted = !state.muted; saveState(); const button = app.querySelector('[data-action="sound"]')!; button.innerHTML = `${icon(state.muted ? 'muted' : 'sound',20)}<span>${state.muted ? '音效关闭' : '音效开启'}</span>`; button.setAttribute('aria-label', state.muted ? '开启音效' : '关闭音效'); notify(state.muted ? '音效已关闭' : '音效已开启'); }
   if (action === 'download-report') saveReport();
-  if (action === 'print-report') window.print();
+  if (action === 'print-report') {
+    if (window.garageDesktop) void window.garageDesktop.printPDF();
+    else window.print();
+  }
   if (action === 'vehicle-png') void saveVehiclePNG();
 });
 window.addEventListener('hashchange', render);

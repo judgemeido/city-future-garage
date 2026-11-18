@@ -13,7 +13,7 @@ let activeBrowser;
   const page=await context.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   fs.mkdirSync('output/playwright',{recursive:true});
-  const visit=async id=>{await page.goto(base+'#'+id);await page.waitForFunction(()=>document.querySelector('#game-host')?.dataset.photoState==='ready');await page.waitForSelector('.lab-stage canvas[data-logical-width]');if(id==='parking'){const d=page.locator('.parking-extras>details').first();if(!await d.evaluate(e=>e.open))await d.locator(':scope > summary').click();}};
+  const visit=async id=>{await page.goto(base+'#'+id);if(id==='grip')await page.locator('[data-grip-mode="lab"]').click();await page.waitForFunction(()=>document.querySelector('#game-host')?.dataset.photoState==='ready');await page.waitForSelector('.lab-stage canvas[data-logical-width]');if(id==='parking'){const d=page.locator('.parking-extras>details').first();if(!await d.evaluate(e=>e.open))await d.locator(':scope > summary').click();}};
   const data=()=>page.locator('#game-host').evaluate(el=>({...el.dataset}));
   const image=()=>page.locator('[data-photo-canvas]').evaluate(c=>c.toDataURL());
   const click=async(x,y)=>{const b=await page.locator('.lab-stage canvas').boundingBox();await page.mouse.click(b.x+x*b.width/1000,b.y+y*b.height/500);};
@@ -96,7 +96,7 @@ let activeBrowser;
     await failurePage.goto(base+'#parking');await failurePage.waitForFunction(()=>document.querySelector('#game-host')?.dataset.photoState==='error');
     assert.equal(await failurePage.locator('[data-photo-zoom]').isDisabled(),true);await failurePage.locator('.parking-extras>details').first().locator(':scope > summary').click();block=false;await failurePage.locator('[data-photo-retry]').click();
     await failurePage.waitForFunction(()=>document.querySelector('#game-host').dataset.photoState==='ready');
-    await failurePage.goto(base+'#repair');await failurePage.goto(base+'#grip');await failurePage.waitForFunction(()=>document.querySelector('#game-host').dataset.photoState==='ready'&&document.querySelector('#game-host').dataset.photoId==='tire-tread');
+    await failurePage.goto(base+'#repair');await failurePage.goto(base+'#grip');await failurePage.locator('[data-grip-mode="lab"]').click();await failurePage.waitForFunction(()=>document.querySelector('#game-host').dataset.photoState==='ready'&&document.querySelector('#game-host').dataset.photoId==='tire-tread');
     await failurePage.close();console.log('PASS failed real-photo load retries and scene disposal discards stale images');
   }
   assert.deepEqual(errors,[]);

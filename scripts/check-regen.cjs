@@ -15,7 +15,7 @@ async function check(name,run){try{await run();passed.push(name);console.log('PA
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
   await page.clock.install();await page.clock.pauseAt(Date.now()+100);
   const advance=ms=>page.clock.runFor(ms);
-  const visit=async(id='regen')=>{const target=`${base}#${id}`;if(page.url()===new URL(target).href)await page.reload();else await page.goto(target);await advance(700);if(id==='regen')await page.waitForSelector('.regen-stage canvas');};
+  const visit=async(id='regen')=>{const target=`${base}#${id}`;if(page.url()===new URL(target).href)await page.reload();else await page.goto(target);await advance(700);if(id==='regen'){await page.locator('[data-regen-mode="lab"]').click();await advance(300);await page.waitForSelector('.regen-stage canvas');}};
   const data=()=>page.locator('#game-host').evaluate(el=>({...el.dataset}));
   const record=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('city-future-garage-v1')));
   const click=s=>page.locator(s).click();
@@ -52,7 +52,7 @@ async function check(name,run){try{await run();passed.push(name);console.log('PA
     const awards=s.progress.regen.awards;await click('[data-save]');assert.deepEqual((await record()).progress.regen.awards,awards);
     await page.locator('[data-replay]').focus();await page.keyboard.press('Home');assert.match(await page.locator('[data-replay-values="0"]').textContent(),/^0.0 s · 回收 0.0/);
     await click('[data-compare-battery]');await replayEnd();assert.equal(await page.locator('[data-replay-lanes]>div').count(),3);await shot('battery-comparison');await click('[data-finding]');
-    await page.reload();await advance(700);assert.match(await page.locator('[data-best="0"]').textContent(),/★/);await click('.regen-rules summary');assert.match(await page.locator('[data-finding-saved]').textContent(),/满电/);assert.equal((await record()).progress.regen.awards['parking-skill'].points,25);assert.equal((await record()).progress.regen.data.legacyMarker,'preserve-me');
+    await page.reload();await advance(700);await click('[data-regen-mode="lab"]');await advance(300);assert.match(await page.locator('[data-best="0"]').textContent(),/★/);await click('.regen-rules summary');assert.match(await page.locator('[data-finding-saved]').textContent(),/满电/);assert.equal((await record()).progress.regen.awards['parking-skill'].points,25);assert.equal((await record()).progress.regen.data.legacyMarker,'preserve-me');
   });
   await check('three route deliveries, cold/full limits and coach exclusions survive actual UI',async()=>{
     for(const [route,mode] of [[0,'cold'],[0,'full'],[1,'normal'],[2,'normal']]){
@@ -88,7 +88,7 @@ async function check(name,run){try{await run();passed.push(name);console.log('PA
   });
   await check('touch input can start, brake and pause at phone width',async()=>{
     const mobile=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});if(base.startsWith('file:'))await mobile.setOffline(true);
-    const p=await mobile.newPage();p.on('pageerror',e=>errors.push(e.message));await p.clock.install();await p.clock.pauseAt(Date.now()+100);await p.goto(`${base}#regen`);await p.clock.runFor(700);
+    const p=await mobile.newPage();p.on('pageerror',e=>errors.push(e.message));await p.clock.install();await p.clock.pauseAt(Date.now()+100);await p.goto(`${base}#regen`);await p.clock.runFor(700);await p.locator('[data-regen-mode="lab"]').tap();await p.clock.runFor(300);
     await p.locator('[data-start]').tap();await p.clock.runFor(2000);await p.locator('[data-control="light"]').tap();await p.clock.runFor(500);assert.equal(await p.locator('#game-host').getAttribute('data-action'),'light');assert.ok(Number(await p.locator('#game-host').getAttribute('data-recovered'))>0);
     await p.locator('[data-pause]').tap();assert.equal(await p.locator('#game-host').getAttribute('data-paused'),'true');await p.evaluate(()=>window.scrollTo(0,0));await p.screenshot({path:`${out}/touch-phone.png`,fullPage:true});await mobile.close();
   });

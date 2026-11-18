@@ -10,6 +10,7 @@ export interface GameAPI {
   getRecord(game: GameId): Record<string, unknown>;
   saveImage(game: GameId, image: string): void;
   notify(message: string): void;
+  playCue?(kind: 'reward' | 'hit' | 'boost' | 'start'): void;
   getVehicle(): Vehicle;
   setVehicle(vehicle: Vehicle): void;
   getProfile(): Profile;

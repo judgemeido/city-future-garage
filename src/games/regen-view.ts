@@ -41,14 +41,14 @@ export function drawRegen(ctx:CanvasRenderingContext2D,time:number,s:RegenState,
   for(let x=Math.floor(camera/10)*10;x<camera+170;x+=10){ctx.fillStyle='#91bacb61';ctx.fillRect(map(x),ground(x)+29,23,3);}
   config.stops.forEach((stop,i)=>{const x=map(stop.x),y=ground(stop.x);if(x<-100||x>1100)return;const done=i<s.stopIndex;ctx.fillStyle=done?'#75f1bb28':'#75f1bb45';ctx.fillRect(map(stop.x-config.tolerance),y,2*config.tolerance*scale,45);ctx.fillStyle='#a1f6cd';ctx.fillRect(x-2,y+3,4,31);roundRect(ctx,x-44,y-111,98,31,5,done?'#224e42':'#193b42','#79bcad');label(ctx,`${done?'✓ ':''}${stop.name}`,x-34,y-90,15,'#d6f9e9');ctx.fillStyle='#75b9ad';ctx.fillRect(x+2,y-80,3,80);
     if(done){roundRect(ctx,x+48,y-50,24,29,7,'#cfb1e9');ctx.fillStyle='#dce3ed';ctx.beginPath();ctx.arc(x+60,y-60,12,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#cfb1e9';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(x+52,y-39);ctx.lineTo(x+35,y-58+(api.reducedMotion()?0:Math.sin(time*5)*4));ctx.stroke();}});
-  const carX=map(s.x),carY=ground(s.x)-18,slope=terrainAt(config,s.x).slope;
-  ctx.save();ctx.translate(carX,carY);ctx.rotate(Math.atan(-slope*7/scale));const vehicle=api.getVehicle();drawCar(ctx,0,0,vehicle.color,.66,s.x/.31,vehicle.body);
-  ctx.save();ctx.translate(-12,-44);ctx.rotate(api.reducedMotion()?0:s.cargo);
+  const carX=map(s.x),carY=ground(s.x)-23,slope=terrainAt(config,s.x).slope;
+  ctx.save();ctx.translate(carX,carY);ctx.rotate(Math.atan(-slope*7/scale));const vehicle=api.getVehicle();drawCar(ctx,0,0,vehicle.color,.68,s.x/.31,vehicle.body);
+  ctx.save();ctx.translate(-10,-33);ctx.rotate(api.reducedMotion()?0:s.cargo);
   if(s.route===0){roundRect(ctx,-22,-35,43,34,6,'#ae95ca50','#b9ace0');roundRect(ctx,-14,-24,28,22,6,'#f3c478');roundRect(ctx,-12,-26,24,8,4,'#ad775b');ctx.fillStyle='#6d473e';ctx.fillRect(-7,-15,3,3);ctx.fillRect(5,-15,3,3);}
   else if(s.route===1){roundRect(ctx,-15,-17,30,18,4,'#ac8065');ctx.strokeStyle='#8ef0b1';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(0,-17);ctx.quadraticCurveTo(4,-30,0,-45);ctx.stroke();ctx.fillStyle='#8ef0b1';ctx.beginPath();ctx.ellipse(-8,-31,11,5,.4,0,Math.PI*2);ctx.ellipse(9,-40,10,5,-.5,0,Math.PI*2);ctx.fill();}
   else for(let i=0;i<3-s.deliveries.length;i++){roundRect(ctx,-31+i*22,-24,20,24,3,i%2?'#bc98df':'#e0b780');ctx.fillStyle='#eed9b5';ctx.fillRect(-24+i*22,-24,5,24);}
-  ctx.restore();roundRect(ctx,46,-62,29,23,7,'#a8d9e3');ctx.fillStyle='#1d394b';ctx.fillRect(52,-54,4,5);ctx.fillRect(65,-54,4,5);
-  if(Math.abs(s.cargo)>.18){ctx.strokeStyle='#a8d9e3';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(47,-42);ctx.lineTo(34,-53);ctx.stroke();}
+  ctx.restore();roundRect(ctx,38,-50,26,20,7,'#a8d9e3');ctx.fillStyle='#1d394b';ctx.fillRect(43,-43,4,4);ctx.fillRect(55,-43,4,4);
+  if(Math.abs(s.cargo)>.18){ctx.strokeStyle='#a8d9e3';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(39,-33);ctx.lineTo(28,-43);ctx.stroke();}
   const regen=s.power>1,drive=s.drivePower>1,moving=s.phase==='running'&&!s.paused;
   if(regen||drive){roundRect(ctx,-48,-15,94,18,4,'#112e35cf','#7ee5b5');roundRect(ctx,-12,-11,28,10,2,'#6ebfaa');ctx.strokeStyle='#9cf4c8';ctx.lineWidth=2;ctx.setLineDash([4,6]);ctx.lineDashOffset=api.reducedMotion()||!moving?0:(regen?-1:1)*time*30;ctx.beginPath();ctx.moveTo(-38,-3);ctx.lineTo(24,-3);ctx.stroke();ctx.setLineDash([]);label(ctx,regen?'电机发电 → 电池':'电池 → 电机驱动',-73,-103,14,'#b6f8d9');}
   if(s.frictionPower>50){ctx.strokeStyle='#f4bb77';ctx.lineWidth=3;ctx.beginPath();ctx.arc(42,8,16,Math.PI,Math.PI*1.9);ctx.stroke();}
